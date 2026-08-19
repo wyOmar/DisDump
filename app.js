@@ -32,6 +32,10 @@ let demoMediaRegistry = [];      // Isolated 26 demo items for AI search
 let rawFilteredRegistry = [];    // Tab 2 items
 let aiFilteredRegistry = [];     // Tab 3 items
 
+// High-Performance Incremental Category Counters
+let rawCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
+let aiCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
+
 // Multi-select Category Filters: Defaults to Images & Videos
 let rawSelectedCategories = new Set(["image", "video"]);
 let aiSelectedCategories = new Set(["image", "video"]);
@@ -194,7 +198,7 @@ const lightboxOcrText = document.getElementById("lightboxOcrText");
 let selectedZipFile = null;
 let selectedCloudZip = null;
 
-// --- 1. Mode Initialization & Browser Compatibility Verification ---
+// --- 1. Mode Initialization & Browser Compatibility Check ---
 function setupEnvironmentMode() {
   if (IS_LOCAL_HOST) {
     if (cloudScannerCard) cloudScannerCard.remove();
@@ -250,7 +254,7 @@ navTabs.forEach(tab => {
 navBrand.addEventListener("click", () => switchTab("tabExtractor"));
 btnViewLive.addEventListener("click", () => switchTab("tabRawBrowser"));
 
-// --- 3. Utilities & Timestamp Parsers ---
+// --- 3. Utilities & Fast Normalization ---
 function formatNumber(num) {
   return new Intl.NumberFormat("en-US").format(num || 0);
 }
@@ -266,6 +270,26 @@ function getCategory(ext) {
   if (audios.includes(ext)) return "audio";
   if (docs.includes(ext)) return "doc";
   return "other";
+}
+
+function normalizeDiscordUrl(url) {
+  if (!url) return "";
+  let clean = url.replace(/[)\]">]+$/, "");
+  if (clean.includes("media.discordapp.net")) {
+    clean = clean.replace("media.discordapp.net", "cdn.discordapp.com");
+  }
+  if (clean.includes("?width=") || clean.includes("&width=")) {
+    try {
+      const parsed = new URL(clean);
+      parsed.searchParams.delete("width");
+      parsed.searchParams.delete("height");
+      parsed.searchParams.delete("format");
+      return parsed.toString();
+    } catch {
+      return clean;
+    }
+  }
+  return clean;
 }
 
 function extractDateFromFilename(filename) {
@@ -347,7 +371,7 @@ async function resolveItemBlob(item) {
   return null;
 }
 
-// --- 4. Load Pre-Indexed Demo (Isolated to AI Search Tab Only) ---
+// --- 4. Load Pre-Indexed Demo ---
 async function loadDemoVault() {
   try {
     await initSql();
@@ -360,15 +384,19 @@ async function loadDemoVault() {
 
     if (res.length > 0) {
       demoMediaRegistry = [];
+      aiCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
+
       for (const [filename, ocrText, visualTags] of res[0].values) {
         const ext = filename.split(".").pop().toLowerCase();
         const folder = (ext === "png") ? "png" : "jpg";
+        const cat = getCategory(ext);
+        aiCategoryCounts[cat] = (aiCategoryCounts[cat] || 0) + 1;
 
         demoMediaRegistry.push({
           id: demoMediaRegistry.length,
           filename: filename,
           ext: ext,
-          category: getCategory(ext),
+          category: cat,
           timestamp: extractDateFromFilename(filename),
           blobUrl: `demo/${folder}/${filename}`,
           fileHandle: null,
@@ -378,7 +406,7 @@ async function loadDemoVault() {
       }
 
       updateAiTimelineBounds();
-      updateAllBadgeCounters();
+      renderBadgeUI();
       aiIndexStatus.textContent = `Pre-Loaded Demo Index (${demoMediaRegistry.length} items ready)`;
     }
   } catch (err) {
@@ -386,22 +414,19 @@ async function loadDemoVault() {
   }
 }
 
-function updateAllBadgeCounters() {
-  document.getElementById("rawCntImg").textContent = formatNumber(allMediaRegistry.filter(m => m.category === "image").length);
-  document.getElementById("rawCntVid").textContent = formatNumber(allMediaRegistry.filter(m => m.category === "video").length);
-  document.getElementById("rawCntAud").textContent = formatNumber(allMediaRegistry.filter(m => m.category === "audio").length);
-  document.getElementById("rawCntDoc").textContent = formatNumber(allMediaRegistry.filter(m => m.category === "doc").length);
-  document.getElementById("rawCntOth").textContent = formatNumber(allMediaRegistry.filter(m => m.category === "other").length);
+function renderBadgeUI() {
+  document.getElementById("rawCntImg").textContent = formatNumber(rawCategoryCounts.image);
+  document.getElementById("rawCntVid").textContent = formatNumber(rawCategoryCounts.video);
+  document.getElementById("rawCntAud").textContent = formatNumber(rawCategoryCounts.audio);
+  document.getElementById("rawCntDoc").textContent = formatNumber(rawCategoryCounts.doc);
+  document.getElementById("rawCntOth").textContent = formatNumber(rawCategoryCounts.other);
 
-  const activeAiSource = hasIndexedDbLoaded 
-    ? allMediaRegistry.filter(item => item.visualTags || item.ocrText) 
-    : demoMediaRegistry;
-
-  document.getElementById("aiCntImg").textContent = formatNumber(activeAiSource.filter(m => m.category === "image").length);
-  document.getElementById("aiCntVid").textContent = formatNumber(activeAiSource.filter(m => m.category === "video").length);
-  document.getElementById("aiCntAud").textContent = formatNumber(activeAiSource.filter(m => m.category === "audio").length);
-  document.getElementById("aiCntDoc").textContent = formatNumber(activeAiSource.filter(m => m.category === "doc").length);
-  document.getElementById("aiCntOth").textContent = formatNumber(activeAiSource.filter(m => m.category === "other").length);
+  const activeAiCounts = hasIndexedDbLoaded ? rawCategoryCounts : aiCategoryCounts;
+  document.getElementById("aiCntImg").textContent = formatNumber(activeAiCounts.image);
+  document.getElementById("aiCntVid").textContent = formatNumber(activeAiCounts.video);
+  document.getElementById("aiCntAud").textContent = formatNumber(activeAiCounts.audio);
+  document.getElementById("aiCntDoc").textContent = formatNumber(activeAiCounts.doc);
+  document.getElementById("aiCntOth").textContent = formatNumber(activeAiCounts.other);
 }
 
 // --- 5. TAB 2: Raw Media Browser Logic & Timeline Engine ---
@@ -691,7 +716,7 @@ btnRawPrevPageBottom.addEventListener("click", () => handleRawPageChange(rawCurr
 btnRawNextPageTop.addEventListener("click", () => handleRawPageChange(rawCurrentPage + 1));
 btnRawNextPageBottom.addEventListener("click", () => handleRawPageChange(rawCurrentPage + 1));
 
-// --- 6. TAB 3: Label Search (Pure Tag Search & Date/Sort Features) ---
+// --- 6. TAB 3: Label Search ---
 function applyAiFiltersAndPaginate() {
   const source = hasIndexedDbLoaded 
     ? allMediaRegistry.filter(item => item.visualTags || item.ocrText) 
@@ -701,16 +726,11 @@ function applyAiFiltersAndPaginate() {
 
   aiFilteredRegistry = source.filter(item => {
     if (!aiSelectedCategories.has(item.category)) return false;
-    
-    // Tag search
     if (tagQuery && !item.visualTags.toLowerCase().includes(tagQuery)) {
       return false;
     }
-
-    // Date range filtering
     if (aiFilterStartDate && item.timestamp >= "2000" && item.timestamp.slice(0, 10) < aiFilterStartDate) return false;
     if (aiFilterEndDate && item.timestamp >= "2000" && item.timestamp.slice(0, 10) > aiFilterEndDate) return false;
-
     return true;
   });
 
@@ -950,7 +970,7 @@ btnAiPrevPageBottom.addEventListener("click", () => handleAiPageChange(aiCurrent
 btnAiNextPageTop.addEventListener("click", () => handleAiPageChange(aiCurrentPage + 1));
 btnAiNextPageBottom.addEventListener("click", () => handleAiPageChange(aiCurrentPage + 1));
 
-// --- 7. Lightbox Modal & Smooth Pan/Zoom (Right-Click Copy Preserved) ---
+// --- 7. Lightbox Modal & Smooth Pan/Zoom ---
 function resetImageZoomPan() {
   zoomScale = 1;
   panX = 0;
@@ -987,7 +1007,7 @@ lightboxMediaPane.addEventListener("wheel", (e) => {
 
 // Click & Drag Pan
 lightboxMediaPane.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return; // Right-click untouched
+  if (e.button !== 0) return; // Right-click untouched for copy/save
   const img = mediaContainer.querySelector("img");
   if (!img || zoomScale <= 1) return;
   
@@ -1098,7 +1118,7 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") navigateLightbox(1);
 });
 
-// Dynamic Support & Demo Modal Populator
+// Dynamic Modal Populator
 function openDemoInfoModal() {
   if (IS_LOCAL_HOST) {
     modalTag.textContent = "Offline Demo Gallery";
@@ -1156,7 +1176,7 @@ function openDemoInfoModal() {
         <a href="https://ko-fi.com/chanvincent" target="_blank" rel="noopener noreferrer" class="btn btn-kofi btn-modal-action">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.047 3.974-4.047 3.974s-2.8-2.521-4.047-3.974c-1.332-1.554-.832-4.071 1.069-4.57 1.901-.5 2.978 1.002 2.978 1.002s1.077-1.502 2.978-1.002c1.901.499 2.401 3.016 1.069 4.57zm6.305-1.232c-.377 1.99-2.029 2.378-2.029 2.378v-4.834s1.652.466 2.029 2.456z"/>
-            </svg>
+          </svg>
           Support on Ko-fi
         </a>
       </div>
@@ -1170,12 +1190,11 @@ if (btnOpenLocalDemoInfo) btnOpenLocalDemoInfo.addEventListener("click", openDem
 if (btnCloseSupportModal) btnCloseSupportModal.addEventListener("click", () => supportModal.classList.add("hidden"));
 if (supportModal) supportModal.addEventListener("click", (e) => { if (e.target === supportModal) supportModal.classList.add("hidden"); });
 
-// --- 8. Open Existing Folder Workflow (Hierarchy: screenshots.db > demo.db) ---
+// --- 8. Open Existing Folder Workflow ---
 async function openExistingFolder() {
   try {
     const pickedHandle = await window.showDirectoryPicker({ 
-      mode: "read",
-      startIn: "downloads"
+      mode: "read"
     });
     
     let targetHandle = pickedHandle;
@@ -1194,6 +1213,7 @@ async function openExistingFolder() {
     dlProgressBar.style.width = "20%";
 
     allMediaRegistry = [];
+    rawCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
     folderHandleCache.clear();
     hasIndexedDbLoaded = false;
 
@@ -1236,13 +1256,16 @@ async function openExistingFolder() {
           for await (const [fileName, fileHandle] of handle.entries()) {
             if (fileHandle.kind === "file") {
               const ext = fileName.split(".").pop().toLowerCase();
+              const cat = getCategory(ext);
               const dbMatch = searchMap.get(fileName) || { ocr: "", tags: "" };
+
+              rawCategoryCounts[cat] = (rawCategoryCounts[cat] || 0) + 1;
 
               allMediaRegistry.push({
                 id: allMediaRegistry.length,
                 filename: fileName,
                 ext: ext,
-                category: getCategory(ext),
+                category: cat,
                 timestamp: extractDateFromFilename(fileName),
                 fileHandle: fileHandle,
                 blobUrl: null,
@@ -1251,9 +1274,9 @@ async function openExistingFolder() {
               });
 
               scannedFilesCount++;
-              if (scannedFilesCount % 500 === 0) {
+              if (scannedFilesCount % 1000 === 0) {
                 dlStatusDetail.textContent = `Found ${formatNumber(scannedFilesCount)} files...`;
-                updateAllBadgeCounters();
+                renderBadgeUI();
               }
             }
           }
@@ -1271,7 +1294,7 @@ async function openExistingFolder() {
 
     updateTimelineBounds();
     updateAiTimelineBounds();
-    updateAllBadgeCounters();
+    renderBadgeUI();
     applyRawFiltersAndPaginate();
 
     aiIndexStatus.textContent = hasIndexedDbLoaded 
@@ -1279,7 +1302,11 @@ async function openExistingFolder() {
       : `Loaded Local Archive (${formatNumber(allMediaRegistry.length)} items - No SQLite database found)`;
   } catch (err) {
     downloadStatusBar.classList.add("hidden");
-    if (err.name !== "AbortError") alert("Could not open folder: " + err.message);
+    if (err.name === "SecurityError") {
+      alert("Browser Security Notice: Browsers block selecting root folders (like Downloads or Desktop) directly. Please select a subfolder inside them instead (e.g. Downloads/MyMedia).");
+    } else if (err.name !== "AbortError") {
+      alert("Could not open folder: " + err.message);
+    }
   }
 }
 
@@ -1288,7 +1315,7 @@ if (btnRawOpenFolder) btnRawOpenFolder.addEventListener("click", openExistingFol
 if (btnAiOpenFolder) btnAiOpenFolder.addEventListener("click", openExistingFolder);
 if (btnEmptyOpenFolder) btnEmptyOpenFolder.addEventListener("click", openExistingFolder);
 
-// --- 9. Zip Extractor Workflow ---
+// --- 9. High-Speed Zip Extraction Pipeline ---
 async function extractAllAttachments(file, maxLimit = null) {
   const manifest = [];
   const attachmentUrlRegex = /https?:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\/([0-9]+)\/([0-9]+)\/([^\s"',?]+)(?:\?[^\s"',]*)?/gi;
@@ -1317,7 +1344,7 @@ async function extractAllAttachments(file, maxLimit = null) {
                   let match;
                   while ((match = attachmentUrlRegex.exec(content)) !== null) {
                     const [fullUrl, channelId, attachId, originalFilename] = match;
-                    const cleanUrl = fullUrl.replace(/[)\]">]+$/, "");
+                    const cleanUrl = normalizeDiscordUrl(fullUrl);
                     const parts = originalFilename.split(".");
                     const ext = parts.length > 1 ? parts.pop().toLowerCase() : "bin";
                     const cleanBase = parts.join(".");
@@ -1350,7 +1377,7 @@ async function extractAllAttachments(file, maxLimit = null) {
             let match;
             while ((match = attachmentUrlRegex.exec(rawContent)) !== null) {
               const [fullUrl, channelId, attachId, originalFilename] = match;
-              const cleanUrl = fullUrl.replace(/[)\]">]+$/, "");
+              const cleanUrl = normalizeDiscordUrl(fullUrl);
               const parts = originalFilename.split(".");
               const ext = parts.length > 1 ? parts.pop().toLowerCase() : "bin";
               const finalFilename = `${formatDatePrefix(null)}_${parts.join(".")}.${ext}`;
@@ -1415,12 +1442,12 @@ btnStartExportPipeline.addEventListener("click", async () => {
 
   try {
     const parentDirHandle = await window.showDirectoryPicker({ 
-      mode: "readwrite",
-      startIn: "downloads"
+      mode: "readwrite"
     });
     currentExportDirHandle = await parentDirHandle.getDirectoryHandle("disdump-download", { create: true });
     
     allMediaRegistry = [];
+    rawCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
     rawCurrentPage = 1;
     folderHandleCache.clear();
     isExtractionRunning = true;
@@ -1436,8 +1463,11 @@ btnStartExportPipeline.addEventListener("click", async () => {
     dlStatusTitle.textContent = `Downloading & sorting ${formatNumber(totalFiles)} attachments...`;
 
     const queue = [...manifest];
-    const concurrency = 12;
+    const concurrency = 16;
     let savedCount = 0;
+    let skippedCount = 0;
+    let processedCount = 0;
+    let lastUiUpdate = Date.now();
 
     async function worker() {
       while (queue.length > 0) {
@@ -1455,19 +1485,28 @@ btnStartExportPipeline.addEventListener("click", async () => {
               await w.close();
               item.fileHandle = fh;
             } catch (writeErr) {
-              console.warn(`File lock skipped: ${item.filename}`, writeErr);
+              console.warn(`File write skipped: ${item.filename}`, writeErr);
             }
 
+            rawCategoryCounts[item.category] = (rawCategoryCounts[item.category] || 0) + 1;
             allMediaRegistry.push(item);
-            updateAllBadgeCounters();
+            savedCount++;
+          } else {
+            skippedCount++;
           }
-        } catch (err) {
-          console.warn(`Failed: ${item.filename}`, err);
+        } catch {
+          skippedCount++;
         } finally {
-          savedCount++;
-          const pct = ((savedCount / totalFiles) * 100).toFixed(1);
-          dlProgressBar.style.width = `${pct}%`;
-          dlStatusDetail.textContent = `${pct}% • ${formatNumber(savedCount)} / ${formatNumber(totalFiles)} saved to /disdump-download`;
+          processedCount++;
+          
+          const now = Date.now();
+          if (now - lastUiUpdate > 100 || processedCount === totalFiles) {
+            lastUiUpdate = now;
+            const pct = ((processedCount / totalFiles) * 100).toFixed(1);
+            dlProgressBar.style.width = `${pct}%`;
+            dlStatusDetail.textContent = `${pct}% • ${formatNumber(savedCount)} saved${skippedCount > 0 ? ` (${formatNumber(skippedCount)} expired/deleted)` : ""}`;
+            renderBadgeUI();
+          }
         }
       }
     }
@@ -1476,14 +1515,19 @@ btnStartExportPipeline.addEventListener("click", async () => {
     isExtractionRunning = false;
     
     dlStatusTitle.textContent = "Extraction complete!";
-    dlStatusDetail.textContent = `All ${formatNumber(allMediaRegistry.length)} files saved to /disdump-download.`;
+    dlStatusDetail.textContent = `All ${formatNumber(savedCount)} available files downloaded into /disdump-download.`;
     
+    renderBadgeUI();
     updateTimelineBounds();
     applyRawFiltersAndPaginate();
 
   } catch (err) {
     isExtractionRunning = false;
-    if (err.name !== "AbortError") alert("Export failed: " + err.message);
+    if (err.name === "SecurityError") {
+      alert("Browser Security Notice: Browsers block selecting root folders (like Downloads or Desktop) directly. Please open Downloads, create a new folder (e.g. 'MyDiscordMedia'), and select that folder.");
+    } else if (err.name !== "AbortError") {
+      alert("Export failed: " + err.message);
+    }
   }
 });
 
@@ -1504,8 +1548,7 @@ if (btnStartCloudScan) {
 
     try {
       const pickedHandle = await window.showDirectoryPicker({ 
-        mode: "readwrite",
-        startIn: "downloads"
+        mode: "readwrite"
       });
       
       let targetHandle = pickedHandle;
@@ -1612,7 +1655,7 @@ if (btnStartCloudScan) {
             allMediaRegistry = imageManifest;
             updateTimelineBounds();
             updateAiTimelineBounds();
-            updateAllBadgeCounters();
+            renderBadgeUI();
 
             dlProgressBar.style.width = "100%";
             dlStatusTitle.textContent = "Labelling Complete!";
@@ -1635,7 +1678,11 @@ if (btnStartCloudScan) {
 
     } catch (err) {
       downloadStatusBar.classList.add("hidden");
-      if (err.name !== "AbortError") aiIndexStatus.textContent = "Error: " + err.message;
+      if (err.name === "SecurityError") {
+        alert("Browser Security Notice: Browsers block selecting root folders (like Downloads or Desktop) directly. Please select a subfolder inside them instead (e.g. Downloads/MyMedia).");
+      } else if (err.name !== "AbortError") {
+        aiIndexStatus.textContent = "Error: " + err.message;
+      }
     }
   });
 }

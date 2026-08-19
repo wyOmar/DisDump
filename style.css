@@ -117,7 +117,6 @@ body {
   text-transform: uppercase;
 }
 
-/* Standalone, non-stretching yellow pill */
 .tag-experimental-inline {
   display: inline-flex;
   align-items: center;
@@ -172,7 +171,6 @@ body {
 .btn-discord { background: var(--discord-blurple); color: #fff; }
 .btn-discord:hover { background: var(--discord-hover); }
 
-/* Discord White Theme Button for Modals */
 .btn-discord-white {
   background: #ffffff;
   color: #5865f2;
@@ -189,7 +187,6 @@ body {
 .btn-lg { padding: 0.75rem 1.4rem; font-size: 0.95rem; }
 .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.78rem; height: 32px; }
 
-/* Hero Action Buttons on Landing Guide */
 .btn-hero-action {
   padding: 0.65rem 1.4rem;
   font-size: 0.92rem;
@@ -300,6 +297,22 @@ code {
 .step-inputs { display: flex; flex-direction: column; gap: 0.75rem; }
 .sub-caption { font-size: 0.75rem; color: var(--text-muted); text-align: center; }
 .file-confirm-text { font-size: 0.82rem; color: #86efac; word-break: break-all; }
+
+/* Discrete Folder Subfolder Helper Tip */
+.folder-selection-tip {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 0.55rem 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.folder-selection-tip strong {
+  color: var(--text-header);
+}
 
 /* Visual How-To Guide */
 .guide-container {
