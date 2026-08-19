@@ -25,6 +25,7 @@ let activeDb = null;
 let hasIndexedDbLoaded = false;
 let currentExportDirHandle = null;
 let isExtractionRunning = false;
+let hasShownLabelDemoModal = false;
 
 let allMediaRegistry = [];       // Master user archive items
 let demoMediaRegistry = [];      // Isolated 26 demo items for AI search
@@ -154,7 +155,7 @@ const btnAiPrevPageBottom = document.getElementById("btnAiPrevPageBottom");
 const btnAiNextPageTop = document.getElementById("btnAiNextPageTop");
 const btnAiNextPageBottom = document.getElementById("btnAiNextPageBottom");
 
-// Support / Ko-fi / Info Modal Elements
+// Support / Info Modal Elements
 const supportModal = document.getElementById("supportModal");
 const modalTag = document.getElementById("modalTag");
 const modalTitle = document.getElementById("modalTitle");
@@ -162,6 +163,11 @@ const modalBody = document.getElementById("modalBody");
 const btnOpenSupportModal = document.getElementById("btnOpenSupportModal");
 const btnOpenLocalDemoInfo = document.getElementById("btnOpenLocalDemoInfo");
 const btnCloseSupportModal = document.getElementById("btnCloseSupportModal");
+
+// Browser Compatibility Modal Elements
+const browserWarningModal = document.getElementById("browserWarningModal");
+const btnCloseBrowserWarning = document.getElementById("btnCloseBrowserWarning");
+const btnAcknowledgeBrowserWarning = document.getElementById("btnAcknowledgeBrowserWarning");
 
 // Sticky Downloader Bar
 const downloadStatusBar = document.getElementById("downloadStatusBar");
@@ -188,7 +194,7 @@ const lightboxOcrText = document.getElementById("lightboxOcrText");
 let selectedZipFile = null;
 let selectedCloudZip = null;
 
-// --- 1. Mode Initialization & Warning Handlers ---
+// --- 1. Mode Initialization & Browser Compatibility Verification ---
 function setupEnvironmentMode() {
   if (IS_LOCAL_HOST) {
     if (cloudScannerCard) cloudScannerCard.remove();
@@ -196,6 +202,20 @@ function setupEnvironmentMode() {
   } else {
     if (localHostBanner) localHostBanner.remove();
   }
+
+  // Detect non-Chromium browsers lacking File System Access API
+  if (typeof window.showDirectoryPicker !== "function") {
+    if (browserWarningModal) {
+      browserWarningModal.classList.remove("hidden");
+    }
+  }
+}
+
+if (btnCloseBrowserWarning) {
+  btnCloseBrowserWarning.addEventListener("click", () => browserWarningModal.classList.add("hidden"));
+}
+if (btnAcknowledgeBrowserWarning) {
+  btnAcknowledgeBrowserWarning.addEventListener("click", () => browserWarningModal.classList.add("hidden"));
 }
 
 window.addEventListener("beforeunload", (e) => {
@@ -206,12 +226,22 @@ window.addEventListener("beforeunload", (e) => {
   }
 });
 
-// --- 2. Tab Navigation ---
+// --- 2. Tab Navigation & Auto Demo Modal Trigger ---
 function switchTab(targetId) {
   navTabs.forEach(t => t.classList.toggle("active", t.dataset.tab === targetId));
   screenViews.forEach(v => v.classList.toggle("active", v.id === targetId));
-  if (targetId === "tabRawBrowser") applyRawFiltersAndPaginate();
-  if (targetId === "tabAiSearch") applyAiFiltersAndPaginate();
+
+  if (targetId === "tabRawBrowser") {
+    applyRawFiltersAndPaginate();
+  }
+
+  if (targetId === "tabAiSearch") {
+    applyAiFiltersAndPaginate();
+    if (!hasShownLabelDemoModal) {
+      openDemoInfoModal();
+      hasShownLabelDemoModal = true;
+    }
+  }
 }
 
 navTabs.forEach(tab => {
@@ -363,7 +393,10 @@ function updateAllBadgeCounters() {
   document.getElementById("rawCntDoc").textContent = formatNumber(allMediaRegistry.filter(m => m.category === "doc").length);
   document.getElementById("rawCntOth").textContent = formatNumber(allMediaRegistry.filter(m => m.category === "other").length);
 
-  const activeAiSource = hasIndexedDbLoaded ? allMediaRegistry : demoMediaRegistry;
+  const activeAiSource = hasIndexedDbLoaded 
+    ? allMediaRegistry.filter(item => item.visualTags || item.ocrText) 
+    : demoMediaRegistry;
+
   document.getElementById("aiCntImg").textContent = formatNumber(activeAiSource.filter(m => m.category === "image").length);
   document.getElementById("aiCntVid").textContent = formatNumber(activeAiSource.filter(m => m.category === "video").length);
   document.getElementById("aiCntAud").textContent = formatNumber(activeAiSource.filter(m => m.category === "audio").length);
@@ -394,7 +427,9 @@ function updateTimelineBounds() {
 }
 
 function updateAiTimelineBounds() {
-  const source = hasIndexedDbLoaded ? allMediaRegistry : demoMediaRegistry;
+  const source = hasIndexedDbLoaded 
+    ? allMediaRegistry.filter(item => item.visualTags || item.ocrText) 
+    : demoMediaRegistry;
   if (!source.length) return;
   const timestamps = source
     .map(m => m.timestamp)
@@ -658,7 +693,10 @@ btnRawNextPageBottom.addEventListener("click", () => handleRawPageChange(rawCurr
 
 // --- 6. TAB 3: Label Search (Pure Tag Search & Date/Sort Features) ---
 function applyAiFiltersAndPaginate() {
-  const source = hasIndexedDbLoaded ? allMediaRegistry : demoMediaRegistry;
+  const source = hasIndexedDbLoaded 
+    ? allMediaRegistry.filter(item => item.visualTags || item.ocrText) 
+    : demoMediaRegistry;
+
   const tagQuery = aiSearchQuery.trim().toLowerCase();
 
   aiFilteredRegistry = source.filter(item => {
@@ -719,8 +757,8 @@ function renderAiGrid(items) {
     aiGrid.appendChild(aiEmptyState);
     if (!hasIndexedDbLoaded && allMediaRegistry.length > 0) {
       aiEmptyMessage.innerHTML = `
-        <strong>No AI Database Found (screenshots.db)</strong><br><br>
-        Your media is loaded in the Media Browser. To enable AI Visual & OCR Search for your files, run <code>python qwen-rtx.py</code> on your GPU or use our 100-image cloud demo above.
+        <strong>No AI Database Found (screenshots.db / demo.db)</strong><br><br>
+        Your media is loaded in the Media Browser. To enable Label Search for your files, run <code>python qwen-rtx.py</code> on your GPU or use our 100-image cloud demo above.
       `;
     } else {
       aiEmptyMessage.textContent = "No matching tagged media found.";
@@ -947,13 +985,13 @@ lightboxMediaPane.addEventListener("wheel", (e) => {
   updateImageTransform();
 }, { passive: false });
 
-// Click & Drag Pan (Only Left Click triggers drag, right click opens context menu)
+// Click & Drag Pan
 lightboxMediaPane.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return; // Right-click remains untouched for copy/save image!
+  if (e.button !== 0) return; // Right-click untouched
   const img = mediaContainer.querySelector("img");
   if (!img || zoomScale <= 1) return;
   
-  e.preventDefault(); // Prevents HTML ghost image drag
+  e.preventDefault();
   isDragging = true;
   startDragX = e.clientX - panX;
   startDragY = e.clientY - panY;
@@ -988,7 +1026,7 @@ async function openLightbox(item, showTags = true) {
     const img = document.createElement("img");
     img.src = blobUrl || "";
     img.alt = item.filename;
-    img.draggable = false; // Disables native HTML ghost dragging
+    img.draggable = false;
     mediaContainer.appendChild(img);
   } else if (item.category === "video") {
     const video = document.createElement("video");
@@ -1072,47 +1110,53 @@ function openDemoInfoModal() {
       <div class="support-callout-box">
         <h4>Index Your Own Discord Archive</h4>
         <p>To generate tags and OCR search for your own downloaded media, run our offline script directly on your GPU:</p>
-        <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="margin-top: 0.5rem;">
+      </div>
+      <div class="support-action-row">
+        <a href="https://github.com/wyOmar/DisDump" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-modal-action">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
           </svg>
-          View Python Script on GitHub
+          GitHub
         </a>
-      </div>
-      <div class="support-action-row">
-        <a href="https://discord.gg/placeholder" target="_blank" rel="noopener noreferrer" class="btn btn-discord btn-sm">
-          Join Discord Server
+        <a href="https://discord.gg/kSfuKytUVx" target="_blank" rel="noopener noreferrer" class="btn btn-discord-white btn-modal-action">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+          </svg>
+          Discord Server
         </a>
       </div>
     `;
   } else {
     modalTag.textContent = "Experimental Cloud Demo";
-    modalTitle.textContent = "Cloud GPU AI Indexing Demo";
+    modalTitle.textContent = "Cloud GPU Label Indexing Demo";
     modalBody.innerHTML = `
       <p>
-        This 100-image preview runs on a remote <strong>NVIDIA L4 GPU</strong> container powered by Modal and <strong>Qwen2.5-VL 3B</strong>.
+        Submitting your <code>package.zip</code> on this page will send attachment URLs to our remote GPU worker — hosting and compute costs are funded entirely out-of-pocket.
       </p>
       <div class="support-callout-box">
-        <h4>For Large Archives (1,000+ files) & 100% Privacy</h4>
-        <p>Please run our Python script locally on your own machine. It requires zero server transmission, runs directly on your GPU (GTX 1060 or modern RTX), and has no image caps.</p>
-        <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="margin-top: 0.5rem;">
+        <h4>Free 100-Image Demonstration</h4>
+        <p>I will label ~100 images for free to demonstrate the visual recognition and OCR functionality before you run the labeling locally. Because compute is limited, running the indexing locally on your own machine is highly recommended.</p>
+      </div>
+      <p class="subtle-note">
+        Cloud GPU runs are funded out-of-pocket. If this tool saved you time, consider supporting compute costs:
+      </p>
+      <div class="support-action-row">
+        <a href="https://github.com/wyOmar/DisDump" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-modal-action">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
           </svg>
-          View Script on GitHub
+          GitHub
         </a>
-      </div>
-      <p class="subtle-note">
-        Cloud GPU demo runs are funded out-of-pocket. If this tool saved you time, consider supporting compute costs:
-      </p>
-      <div class="support-action-row">
-        <a href="https://discord.gg/placeholder" target="_blank" rel="noopener noreferrer" class="btn btn-discord">
+        <a href="https://discord.gg/kSfuKytUVx" target="_blank" rel="noopener noreferrer" class="btn btn-discord-white btn-modal-action">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+          </svg>
           Discord Server
         </a>
-        <a href="https://ko-fi.com/vincentchan" target="_blank" rel="noopener noreferrer" class="btn btn-kofi">
+        <a href="https://ko-fi.com/chanvincent" target="_blank" rel="noopener noreferrer" class="btn btn-kofi btn-modal-action">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.047 3.974-4.047 3.974s-2.8-2.521-4.047-3.974c-1.332-1.554-.832-4.071 1.069-4.57 1.901-.5 2.978 1.002 2.978 1.002s1.077-1.502 2.978-1.002c1.901.499 2.401 3.016 1.069 4.57zm6.305-1.232c-.377 1.99-2.029 2.378-2.029 2.378v-4.834s1.652.466 2.029 2.456z"/>
-          </svg>
+            </svg>
           Support on Ko-fi
         </a>
       </div>
@@ -1126,14 +1170,26 @@ if (btnOpenLocalDemoInfo) btnOpenLocalDemoInfo.addEventListener("click", openDem
 if (btnCloseSupportModal) btnCloseSupportModal.addEventListener("click", () => supportModal.classList.add("hidden"));
 if (supportModal) supportModal.addEventListener("click", (e) => { if (e.target === supportModal) supportModal.classList.add("hidden"); });
 
-// --- 8. Open Existing Folder Workflow ---
+// --- 8. Open Existing Folder Workflow (Hierarchy: screenshots.db > demo.db) ---
 async function openExistingFolder() {
   try {
-    const pickedHandle = await window.showDirectoryPicker({ mode: "read" });
+    const pickedHandle = await window.showDirectoryPicker({ 
+      mode: "read",
+      startIn: "downloads"
+    });
     
+    let targetHandle = pickedHandle;
+    if (pickedHandle.name !== "disdump-download") {
+      try {
+        targetHandle = await pickedHandle.getDirectoryHandle("disdump-download");
+      } catch {
+        targetHandle = pickedHandle;
+      }
+    }
+
     switchTab("tabRawBrowser");
     downloadStatusBar.classList.remove("hidden");
-    dlStatusTitle.textContent = "Scanning local folder...";
+    dlStatusTitle.textContent = "Scanning folder...";
     dlStatusDetail.textContent = "Discovering files...";
     dlProgressBar.style.width = "20%";
 
@@ -1141,16 +1197,17 @@ async function openExistingFolder() {
     folderHandleCache.clear();
     hasIndexedDbLoaded = false;
 
-    let targetHandle = pickedHandle;
-    try {
-      targetHandle = await pickedHandle.getDirectoryHandle("disdump-download");
-    } catch {}
-
     let dbFileHandle = null;
+    let dbSourceName = null;
+
     try {
       dbFileHandle = await targetHandle.getFileHandle("screenshots.db");
+      dbSourceName = "screenshots.db (Local Index)";
     } catch {
-      try { dbFileHandle = await targetHandle.getFileHandle("demo.db"); } catch {}
+      try {
+        dbFileHandle = await targetHandle.getFileHandle("demo.db");
+        dbSourceName = "demo.db (Cloud Demo Index)";
+      } catch {}
     }
 
     let searchMap = new Map();
@@ -1184,7 +1241,7 @@ async function openExistingFolder() {
               allMediaRegistry.push({
                 id: allMediaRegistry.length,
                 filename: fileName,
-                ext,
+                ext: ext,
                 category: getCategory(ext),
                 timestamp: extractDateFromFilename(fileName),
                 fileHandle: fileHandle,
@@ -1208,7 +1265,7 @@ async function openExistingFolder() {
 
     dlProgressBar.style.width = "100%";
     dlStatusTitle.textContent = "Folder Loaded";
-    dlStatusDetail.textContent = `Successfully loaded ${formatNumber(allMediaRegistry.length)} files from folder.`;
+    dlStatusDetail.textContent = `Successfully loaded ${formatNumber(allMediaRegistry.length)} files.`;
     
     setTimeout(() => { downloadStatusBar.classList.add("hidden"); }, 3000);
 
@@ -1218,8 +1275,8 @@ async function openExistingFolder() {
     applyRawFiltersAndPaginate();
 
     aiIndexStatus.textContent = hasIndexedDbLoaded 
-      ? `Loaded Local Archive (${formatNumber(allMediaRegistry.length)} items with AI Index)`
-      : `Loaded Local Archive (${formatNumber(allMediaRegistry.length)} items - No screenshots.db)`;
+      ? `Loaded Local Archive (${formatNumber(allMediaRegistry.filter(i => i.visualTags || i.ocrText).length)} items with ${dbSourceName})`
+      : `Loaded Local Archive (${formatNumber(allMediaRegistry.length)} items - No SQLite database found)`;
   } catch (err) {
     downloadStatusBar.classList.add("hidden");
     if (err.name !== "AbortError") alert("Could not open folder: " + err.message);
@@ -1342,7 +1399,13 @@ async function extractAllAttachments(file, maxLimit = null) {
 extractorZipInput.addEventListener("change", (e) => {
   if (!e.target.files.length) return;
   selectedZipFile = e.target.files[0];
-  selectedZipFilename.textContent = `Selected: ${selectedZipFile.name} (${(selectedZipFile.size / (1024 * 1024)).toFixed(1)} MB)`;
+  
+  if (selectedZipFile.name.toLowerCase() !== "package.zip") {
+    selectedZipFilename.textContent = `Selected: ${selectedZipFile.name} (Notice: Ensure this is your unedited Discord data package)`;
+  } else {
+    selectedZipFilename.textContent = `Selected: ${selectedZipFile.name} (${(selectedZipFile.size / (1024 * 1024)).toFixed(1)} MB)`;
+  }
+  
   selectedZipFilename.classList.remove("hidden");
   btnStartExportPipeline.disabled = false;
 });
@@ -1351,7 +1414,10 @@ btnStartExportPipeline.addEventListener("click", async () => {
   if (!selectedZipFile) return;
 
   try {
-    const parentDirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    const parentDirHandle = await window.showDirectoryPicker({ 
+      mode: "readwrite",
+      startIn: "downloads"
+    });
     currentExportDirHandle = await parentDirHandle.getDirectoryHandle("disdump-download", { create: true });
     
     allMediaRegistry = [];
@@ -1396,7 +1462,7 @@ btnStartExportPipeline.addEventListener("click", async () => {
             updateAllBadgeCounters();
           }
         } catch (err) {
-          console.warn(`Failed downloading ${item.filename}:`, err);
+          console.warn(`Failed: ${item.filename}`, err);
         } finally {
           savedCount++;
           const pct = ((savedCount / totalFiles) * 100).toFixed(1);
@@ -1421,14 +1487,14 @@ btnStartExportPipeline.addEventListener("click", async () => {
   }
 });
 
-// --- 10. Free 100-Image Cloud GPU Scanner (Production Tab 3) ---
+// --- 10. Free 100-Image Cloud GPU Scanner ---
 if (cloudZipInput) {
   cloudZipInput.addEventListener("change", (e) => {
     if (!e.target.files.length) return;
     selectedCloudZip = e.target.files[0];
     lblCloudZip.classList.add("hidden");
     btnStartCloudScan.classList.remove("hidden");
-    aiIndexStatus.textContent = `Selected ${selectedCloudZip.name}. Click Step 2 to choose save folder.`;
+    aiIndexStatus.textContent = `Selected ${selectedCloudZip.name}. Click Step 2 to select your save location.`;
   });
 }
 
@@ -1437,10 +1503,27 @@ if (btnStartCloudScan) {
     if (!selectedCloudZip) return;
 
     try {
-      const parentHandle = await window.showDirectoryPicker({ mode: "readwrite" });
-      const dirHandle = await parentHandle.getDirectoryHandle("disdump-download", { create: true });
+      const pickedHandle = await window.showDirectoryPicker({ 
+        mode: "readwrite",
+        startIn: "downloads"
+      });
+      
+      let targetHandle = pickedHandle;
+      if (pickedHandle.name !== "disdump-download") {
+        try {
+          targetHandle = await pickedHandle.getDirectoryHandle("disdump-download", { create: true });
+        } catch {
+          targetHandle = pickedHandle;
+        }
+      }
+
       btnStartCloudScan.classList.add("hidden");
       lblCloudZip.classList.remove("hidden");
+
+      downloadStatusBar.classList.remove("hidden");
+      dlStatusTitle.textContent = "Scanning package.zip for images...";
+      dlStatusDetail.textContent = "Filtering first 100 images...";
+      dlProgressBar.style.width = "10%";
 
       aiIndexStatus.textContent = "Parsing first 100 image attachments...";
       const rawManifest = await extractAllAttachments(selectedCloudZip, 100);
@@ -1448,9 +1531,13 @@ if (btnStartCloudScan) {
 
       if (!imageManifest.length) {
         aiIndexStatus.textContent = "No image attachments found in package.zip.";
+        downloadStatusBar.classList.add("hidden");
         return;
       }
 
+      dlStatusTitle.textContent = "Submitting to GPU Cloud Queue...";
+      dlStatusDetail.textContent = `Queuing ${imageManifest.length} images...`;
+      dlProgressBar.style.width = "25%";
       aiIndexStatus.textContent = `Submitting ${imageManifest.length} images to Cloud GPU Queue...`;
 
       const queueResp = await fetch(`${VPS_BASE_URL}/api/queue-job`, {
@@ -1458,61 +1545,96 @@ if (btnStartCloudScan) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ files: imageManifest.map(m => ({ filename: m.filename, url: m.url })) })
       });
-      const { job_id } = await queueResp.json();
+      
+      if (!queueResp.ok) {
+        const errData = await queueResp.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server returned HTTP ${queueResp.status}`);
+      }
+      
+      const { job_id, position } = await queueResp.json();
 
       const poll = setInterval(async () => {
-        const st = await (await fetch(`${VPS_BASE_URL}/api/job-status/${job_id}`)).json();
-        if (st.status === "processing") {
-          aiIndexStatus.textContent = "GPU Active: Downloading & indexing OCR with Qwen2.5-VL...";
-        }
-        if (st.status === "completed") {
-          clearInterval(poll);
-          aiIndexStatus.textContent = "Saving screenshots.db to folder...";
-
-          const dbResp = await fetch(`${VPS_BASE_URL}/api/download/${job_id}`);
-          const dbBuf = await dbResp.arrayBuffer();
-
-          const dbFile = await dirHandle.getFileHandle("screenshots.db", { create: true });
-          const wr = await dbFile.createWritable();
-          await wr.write(dbBuf);
-          await wr.close();
-
-          await initSql();
-          activeDb = new sqlEngine.Database(new Uint8Array(dbBuf));
-          hasIndexedDbLoaded = true;
+        try {
+          const st = await (await fetch(`${VPS_BASE_URL}/api/job-status/${job_id}`)).json();
           
-          let searchMap = new Map();
-          try {
-            const res = activeDb.exec("SELECT image_filename, ocr_text, visual_tags FROM screenshot_search");
-            if (res.length) {
-              for (const [fn, txt, tg] of res[0].values) searchMap.set(fn, { txt, tg });
-            }
-          } catch (err) {
-            console.warn("Could not query DB", err);
+          if (st.status === "queued") {
+            const posText = st.position ? `#${st.position}` : "Next in line";
+            dlStatusTitle.textContent = "⏳ Queued for GPU Processing...";
+            dlStatusDetail.textContent = `Queue Position: ${posText} • Waiting for your turn...`;
+            dlProgressBar.style.width = "35%";
+            aiIndexStatus.textContent = `Queue Position: ${posText} • Waiting for your turn...`;
           }
 
-          for (const item of imageManifest) {
-            if (searchMap.has(item.filename)) {
-              const data = searchMap.get(item.filename);
-              item.ocrText = data.txt;
-              item.visualTags = data.tg;
-            }
+          if (st.status === "processing") {
+            dlStatusTitle.textContent = "⚡ GPU Active: Labelling with Qwen2.5-VL...";
+            dlStatusDetail.textContent = `Processing ~${imageManifest.length} images on NVIDIA L4 GPU...`;
+            dlProgressBar.style.width = "70%";
+            aiIndexStatus.textContent = "GPU Active: Labelling & indexing OCR with Qwen2.5-VL...";
           }
 
-          allMediaRegistry = imageManifest;
-          updateTimelineBounds();
-          updateAiTimelineBounds();
-          updateAllBadgeCounters();
-          aiIndexStatus.textContent = `Active Cloud Index (${imageManifest.length} images indexed)`;
-          applyAiFiltersAndPaginate();
-        }
-        if (st.status === "failed") {
-          clearInterval(poll);
-          aiIndexStatus.textContent = `Error: ${st.error || "Processing failed"}`;
+          if (st.status === "completed") {
+            clearInterval(poll);
+            dlStatusTitle.textContent = "Saving Demo Database...";
+            dlStatusDetail.textContent = "Writing demo.db to folder...";
+            dlProgressBar.style.width = "90%";
+            aiIndexStatus.textContent = "Saving demo.db to folder...";
+
+            const dbResp = await fetch(`${VPS_BASE_URL}/api/download/${job_id}`);
+            const dbBuf = await dbResp.arrayBuffer();
+
+            const dbFile = await targetHandle.getFileHandle("demo.db", { create: true });
+            const wr = await dbFile.createWritable();
+            await wr.write(dbBuf);
+            await wr.close();
+
+            await initSql();
+            activeDb = new sqlEngine.Database(new Uint8Array(dbBuf));
+            hasIndexedDbLoaded = true;
+            
+            let searchMap = new Map();
+            try {
+              const res = activeDb.exec("SELECT image_filename, ocr_text, visual_tags FROM screenshot_search");
+              if (res.length) {
+                for (const [fn, txt, tg] of res[0].values) searchMap.set(fn, { txt, tg });
+              }
+            } catch (err) {
+              console.warn("Could not query DB", err);
+            }
+
+            for (const item of imageManifest) {
+              if (searchMap.has(item.filename)) {
+                const data = searchMap.get(item.filename);
+                item.ocrText = data.txt;
+                item.visualTags = data.tg;
+              }
+            }
+
+            allMediaRegistry = imageManifest;
+            updateTimelineBounds();
+            updateAiTimelineBounds();
+            updateAllBadgeCounters();
+
+            dlProgressBar.style.width = "100%";
+            dlStatusTitle.textContent = "Labelling Complete!";
+            dlStatusDetail.textContent = `Successfully saved demo.db and indexed ~${imageManifest.length} images.`;
+            aiIndexStatus.textContent = `Active Cloud Demo Index (${imageManifest.length} images indexed)`;
+            
+            setTimeout(() => { downloadStatusBar.classList.add("hidden"); }, 4000);
+            applyAiFiltersAndPaginate();
+          }
+
+          if (st.status === "failed") {
+            clearInterval(poll);
+            downloadStatusBar.classList.add("hidden");
+            aiIndexStatus.textContent = `Error: ${st.error || "Processing failed"}`;
+          }
+        } catch (pollErr) {
+          console.warn("Status poll error:", pollErr);
         }
       }, 2500);
 
     } catch (err) {
+      downloadStatusBar.classList.add("hidden");
       if (err.name !== "AbortError") aiIndexStatus.textContent = "Error: " + err.message;
     }
   });

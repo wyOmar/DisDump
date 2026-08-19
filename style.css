@@ -13,6 +13,8 @@
   --green-hover: #1f9450;
   --kofi-red: #ff5e5b;
   --kofi-hover: #e04a47;
+  --discord-blurple: #5865f2;
+  --discord-hover: #4752c4;
 }
 
 * {
@@ -115,7 +117,12 @@ body {
   text-transform: uppercase;
 }
 
+/* Standalone, non-stretching yellow pill */
 .tag-experimental-inline {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: max-content;
   font-size: 0.68rem;
   font-weight: 800;
   background: rgba(245, 158, 11, 0.15);
@@ -124,7 +131,12 @@ body {
   padding: 0.15rem 0.45rem;
   border-radius: 3px;
   text-transform: uppercase;
-  display: inline-block;
+}
+
+.tag-experimental-inline.warning-tag {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 /* Buttons & Code styling */
@@ -157,12 +169,27 @@ body {
 .btn-github:hover { background: #1b1f23; }
 .btn-kofi { background: var(--kofi-red); color: #fff; }
 .btn-kofi:hover { background: var(--kofi-hover); }
+.btn-discord { background: var(--discord-blurple); color: #fff; }
+.btn-discord:hover { background: var(--discord-hover); }
+
+/* Discord White Theme Button for Modals */
+.btn-discord-white {
+  background: #ffffff;
+  color: #5865f2;
+  border: 1px solid #e3e5e8;
+}
+
+.btn-discord-white:hover {
+  background: #f2f3f5;
+  color: #4752c4;
+}
+
 .btn-outline-light { background: transparent; border: 1px solid rgba(255, 255, 255, 0.25); color: #fff; }
 .btn-outline-light:hover { background: rgba(255, 255, 255, 0.08); }
 .btn-lg { padding: 0.75rem 1.4rem; font-size: 0.95rem; }
 .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.78rem; height: 32px; }
 
-/* Large Action Buttons on Landing Guide */
+/* Hero Action Buttons on Landing Guide */
 .btn-hero-action {
   padding: 0.65rem 1.4rem;
   font-size: 0.92rem;
@@ -367,17 +394,6 @@ code {
   object-fit: contain;
 }
 
-.code-block-wrapper {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  overflow: hidden;
-  margin-top: 0.75rem;
-}
-
-.code-header { background: rgba(0, 0, 0, 0.2); padding: 0.4rem 0.75rem; font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; }
-.code-block-wrapper pre { padding: 0.85rem; font-size: 0.8rem; line-height: 1.4; color: #e2e8f0; overflow-x: auto; font-family: "JetBrains Mono", monospace; }
-
 /* Connected Dual Timeline Slider Card */
 .timeline-filter-card {
   background: var(--bg-secondary);
@@ -545,6 +561,7 @@ code {
 .banner-flex { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem; }
 .banner-flex strong { color: var(--text-header); }
 .banner-flex code { background: var(--bg-tertiary); padding: 0.1rem 0.35rem; border-radius: 3px; color: #a5b4fc; font-family: "JetBrains Mono", monospace; }
+.local-banner-actions { display: flex; gap: 0.5rem; align-items: center; }
 
 /* Discord-Style Search Engine Bar */
 .vault-search-container {
@@ -623,7 +640,6 @@ code {
   align-items: center;
 }
 
-/* Height-Matched Sort Select */
 .select-sort {
   background: var(--bg-tertiary);
   color: var(--text-normal);
@@ -693,7 +709,7 @@ code {
 .page-range { color: var(--text-muted); font-family: "JetBrains Mono", monospace; font-size: 0.78rem; }
 .page-buttons, .pagination-controls { display: flex; align-items: center; gap: 0.4rem; }
 
-/* High-Performance Media Grid (No Stretching on Few Items) */
+/* High-Performance Media Grid */
 .media-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -782,12 +798,12 @@ code {
   border: 1px solid var(--border-subtle);
 }
 
-/* Support & Experimental Modal */
+/* Support & Info Modals */
 .support-modal-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  max-width: 520px;
+  max-width: 540px;
   width: 100%;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   overflow: hidden;
@@ -801,8 +817,18 @@ code {
   align-items: center;
 }
 
-.modal-title-row { display: flex; flex-direction: column; gap: 0.3rem; }
-.modal-title-row h3 { font-size: 1.1rem; color: var(--text-header); }
+.modal-title-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.modal-title-row h3 {
+  font-size: 1.1rem;
+  color: var(--text-header);
+  margin-top: 0.15rem;
+}
 
 .btn-close-modal {
   background: none;
@@ -818,9 +844,9 @@ code {
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.1rem;
   font-size: 0.88rem;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .support-callout-box {
@@ -830,11 +856,31 @@ code {
   border-radius: 6px;
 }
 
+.support-callout-box.warning-box {
+  border-left: 3px solid #ef4444;
+}
+
 .support-callout-box h4 { font-size: 0.9rem; color: var(--text-header); margin-bottom: 0.3rem; }
-.support-callout-box p { font-size: 0.8rem; color: var(--text-muted); }
+.support-callout-box p { font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; }
 
 .subtle-note { font-size: 0.8rem; color: var(--text-muted); }
-.support-action-row { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; }
+
+/* Clean Modal Action Bar */
+.support-action-row {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.btn-modal-action {
+  padding: 0.5rem 1rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  border-radius: 4px;
+}
 
 /* Lightbox Modal with Hardware-Accelerated Pan & Zoom */
 .lightbox-backdrop {
@@ -1019,16 +1065,6 @@ code {
   letter-spacing: 0.5px;
 }
 
-.footer-subtext {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.footer-subtext a {
-  color: #a5b4fc;
-  text-decoration: none;
-}
-
 .footer-links {
   display: flex;
   align-items: center;
@@ -1050,5 +1086,7 @@ code {
 .footer-icon { width: 16px; height: 16px; }
 .footer-link.kofi-highlight { color: #fca5a5; }
 .footer-link.kofi-highlight:hover { color: #ff5e5b; }
+.footer-link.discord-highlight { color: #c7d2fe; }
+.footer-link.discord-highlight:hover { color: #818cf8; }
 
 .hidden { display: none !important; }
