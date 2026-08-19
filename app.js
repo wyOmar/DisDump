@@ -230,8 +230,12 @@ window.addEventListener("beforeunload", (e) => {
   }
 });
 
-// --- 2. Tab Navigation & Auto Demo Modal Trigger ---
+// --- 2. Tab Navigation & Modal Dismissal ---
 function switchTab(targetId) {
+  // Dismiss any open modals so switching tabs works immediately
+  if (supportModal) supportModal.classList.add("hidden");
+  if (browserWarningModal) browserWarningModal.classList.add("hidden");
+
   navTabs.forEach(t => t.classList.toggle("active", t.dataset.tab === targetId));
   screenViews.forEach(v => v.classList.toggle("active", v.id === targetId));
 
@@ -414,6 +418,7 @@ async function loadDemoVault() {
   }
 }
 
+// High-speed UI badge renderer
 function renderBadgeUI() {
   document.getElementById("rawCntImg").textContent = formatNumber(rawCategoryCounts.image);
   document.getElementById("rawCntVid").textContent = formatNumber(rawCategoryCounts.video);
@@ -1007,7 +1012,7 @@ lightboxMediaPane.addEventListener("wheel", (e) => {
 
 // Click & Drag Pan
 lightboxMediaPane.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return; // Right-click untouched for copy/save
+  if (e.button !== 0) return;
   const img = mediaContainer.querySelector("img");
   if (!img || zoomScale <= 1) return;
   
@@ -1194,7 +1199,8 @@ if (supportModal) supportModal.addEventListener("click", (e) => { if (e.target =
 async function openExistingFolder() {
   try {
     const pickedHandle = await window.showDirectoryPicker({ 
-      mode: "read"
+      mode: "read",
+      startIn: "downloads"
     });
     
     let targetHandle = pickedHandle;
@@ -1315,7 +1321,7 @@ if (btnRawOpenFolder) btnRawOpenFolder.addEventListener("click", openExistingFol
 if (btnAiOpenFolder) btnAiOpenFolder.addEventListener("click", openExistingFolder);
 if (btnEmptyOpenFolder) btnEmptyOpenFolder.addEventListener("click", openExistingFolder);
 
-// --- 9. High-Speed Zip Extraction Pipeline ---
+// --- 9. High-Speed Zip Extraction Pipeline (With Instant Live Refresh) ---
 async function extractAllAttachments(file, maxLimit = null) {
   const manifest = [];
   const attachmentUrlRegex = /https?:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\/([0-9]+)\/([0-9]+)\/([^\s"',?]+)(?:\?[^\s"',]*)?/gi;
@@ -1442,7 +1448,8 @@ btnStartExportPipeline.addEventListener("click", async () => {
 
   try {
     const parentDirHandle = await window.showDirectoryPicker({ 
-      mode: "readwrite"
+      mode: "readwrite",
+      startIn: "downloads"
     });
     currentExportDirHandle = await parentDirHandle.getDirectoryHandle("disdump-download", { create: true });
     
@@ -1468,6 +1475,7 @@ btnStartExportPipeline.addEventListener("click", async () => {
     let skippedCount = 0;
     let processedCount = 0;
     let lastUiUpdate = Date.now();
+    let hasRenderedLiveInitialBatch = false;
 
     async function worker() {
       while (queue.length > 0) {
@@ -1491,6 +1499,12 @@ btnStartExportPipeline.addEventListener("click", async () => {
             rawCategoryCounts[item.category] = (rawCategoryCounts[item.category] || 0) + 1;
             allMediaRegistry.push(item);
             savedCount++;
+
+            // Live Refresh: Render page 1 immediately once the first batch arrives
+            if (!hasRenderedLiveInitialBatch && (savedCount >= 30 || savedCount === totalFiles)) {
+              hasRenderedLiveInitialBatch = true;
+              applyRawFiltersAndPaginate();
+            }
           } else {
             skippedCount++;
           }
@@ -1548,7 +1562,8 @@ if (btnStartCloudScan) {
 
     try {
       const pickedHandle = await window.showDirectoryPicker({ 
-        mode: "readwrite"
+        mode: "readwrite",
+        startIn: "downloads"
       });
       
       let targetHandle = pickedHandle;
