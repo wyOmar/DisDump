@@ -207,7 +207,6 @@ function setupEnvironmentMode() {
     if (localHostBanner) localHostBanner.remove();
   }
 
-  // Detect non-Chromium browsers lacking File System Access API
   if (typeof window.showDirectoryPicker !== "function") {
     if (browserWarningModal) {
       browserWarningModal.classList.remove("hidden");
@@ -232,7 +231,6 @@ window.addEventListener("beforeunload", (e) => {
 
 // --- 2. Tab Navigation & Modal Dismissal ---
 function switchTab(targetId) {
-  // Dismiss any open modals so switching tabs works immediately
   if (supportModal) supportModal.classList.add("hidden");
   if (browserWarningModal) browserWarningModal.classList.add("hidden");
 
@@ -360,7 +358,7 @@ function getSanitizedTagsList(tagsString) {
     });
 }
 
-// Lazy on-demand blob resolution
+// Fallback image resolver: local disk blob -> live Discord CDN URL
 async function resolveItemBlob(item) {
   if (item.blobUrl) return item.blobUrl;
   if (item.fileHandle) {
@@ -371,6 +369,9 @@ async function resolveItemBlob(item) {
     } catch (e) {
       console.warn(`Could not resolve blob for ${item.filename}:`, e);
     }
+  }
+  if (item.url) {
+    return item.url;
   }
   return null;
 }
@@ -404,6 +405,7 @@ async function loadDemoVault() {
           timestamp: extractDateFromFilename(filename),
           blobUrl: `demo/${folder}/${filename}`,
           fileHandle: null,
+          url: null,
           ocrText: ocrText || "",
           visualTags: visualTags || ""
         });
@@ -418,7 +420,6 @@ async function loadDemoVault() {
   }
 }
 
-// High-speed UI badge renderer
 function renderBadgeUI() {
   document.getElementById("rawCntImg").textContent = formatNumber(rawCategoryCounts.image);
   document.getElementById("rawCntVid").textContent = formatNumber(rawCategoryCounts.video);
@@ -994,7 +995,6 @@ function updateImageTransform() {
   img.style.transform = `translate3d(${panX}px, ${panY}px, 0px) scale(${zoomScale})`;
 }
 
-// Mouse Wheel Zoom
 lightboxMediaPane.addEventListener("wheel", (e) => {
   const img = mediaContainer.querySelector("img");
   if (!img) return;
@@ -1010,7 +1010,6 @@ lightboxMediaPane.addEventListener("wheel", (e) => {
   updateImageTransform();
 }, { passive: false });
 
-// Click & Drag Pan
 lightboxMediaPane.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   const img = mediaContainer.querySelector("img");
@@ -1156,14 +1155,15 @@ function openDemoInfoModal() {
     modalTitle.textContent = "Cloud GPU Label Indexing Demo";
     modalBody.innerHTML = `
       <p>
-        Submitting your <code>package.zip</code> on this page will send attachment URLs to our remote GPU worker — hosting and compute costs are funded entirely out-of-pocket.
+        Selecting your <code>package.zip</code> here sends attachment URLs to my GPU worker to generate visual tags and OCR text.
       </p>
       <div class="support-callout-box">
-        <h4>Free 100-Image Demonstration</h4>
-        <p>I will label ~100 images for free to demonstrate the visual recognition and OCR functionality before you run the labeling locally. Because compute is limited, running the indexing locally on your own machine is highly recommended.</p>
+        <h4>100-Image Free Preview</h4>
+        <p>Sorry if the queue is long, I fund this demo out-of-pocket so you can test the tag quality and OCR search before setting it up locally. For entire archives, running the local script on your own machine is recommended (unlimited, faster, and 100% private).</p>
+        <p style="margin-top: 0.6rem;">If you don't have a dedicated / modern GPU to run it locally, feel free to reach out on Discord - depending on capacity, I may be able to help process it.</p>
       </div>
       <p class="subtle-note">
-        Cloud GPU runs are funded out-of-pocket. If this tool saved you time, consider supporting compute costs:
+        If you found this useful, please consider supporting server compute costs or joining the Discord:
       </p>
       <div class="support-action-row">
         <a href="https://github.com/wyOmar/DisDump" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-modal-action">
@@ -1275,6 +1275,7 @@ async function openExistingFolder() {
                 timestamp: extractDateFromFilename(fileName),
                 fileHandle: fileHandle,
                 blobUrl: null,
+                url: null,
                 ocrText: dbMatch.ocr,
                 visualTags: dbMatch.tags
               });
@@ -1321,7 +1322,7 @@ if (btnRawOpenFolder) btnRawOpenFolder.addEventListener("click", openExistingFol
 if (btnAiOpenFolder) btnAiOpenFolder.addEventListener("click", openExistingFolder);
 if (btnEmptyOpenFolder) btnEmptyOpenFolder.addEventListener("click", openExistingFolder);
 
-// --- 9. High-Speed Zip Extraction Pipeline (With Instant Live Refresh) ---
+// --- 9. High-Speed Zip Extraction Pipeline ---
 async function extractAllAttachments(file, maxLimit = null) {
   const manifest = [];
   const attachmentUrlRegex = /https?:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\/([0-9]+)\/([0-9]+)\/([^\s"',?]+)(?:\?[^\s"',]*)?/gi;
@@ -1371,7 +1372,7 @@ async function extractAllAttachments(file, maxLimit = null) {
                     });
 
                     if (maxLimit && manifest.length >= maxLimit) {
-                      resolve(manifest);
+                      resolve(manifest.slice(0, maxLimit));
                       return;
                     }
                   }
@@ -1403,7 +1404,7 @@ async function extractAllAttachments(file, maxLimit = null) {
               });
 
               if (maxLimit && manifest.length >= maxLimit) {
-                resolve(manifest);
+                resolve(manifest.slice(0, maxLimit));
                 return;
               }
             }
@@ -1419,7 +1420,7 @@ async function extractAllAttachments(file, maxLimit = null) {
         const { done, value } = await reader.read();
         if (done) {
           unzipper.push(new Uint8Array(0), true);
-          resolve(manifest);
+          resolve(maxLimit ? manifest.slice(0, maxLimit) : manifest);
           break;
         }
         unzipper.push(value, false);
@@ -1500,7 +1501,7 @@ btnStartExportPipeline.addEventListener("click", async () => {
             allMediaRegistry.push(item);
             savedCount++;
 
-            // Live Refresh: Render page 1 immediately once the first batch arrives
+            // Live rendering refresh once first batch arrives
             if (!hasRenderedLiveInitialBatch && (savedCount >= 30 || savedCount === totalFiles)) {
               hasRenderedLiveInitialBatch = true;
               applyRawFiltersAndPaginate();
@@ -1584,13 +1585,34 @@ if (btnStartCloudScan) {
       dlProgressBar.style.width = "10%";
 
       aiIndexStatus.textContent = "Parsing first 100 image attachments...";
-      const rawManifest = await extractAllAttachments(selectedCloudZip, 100);
-      const imageManifest = rawManifest.filter(m => m.category === "image");
+      const rawExtracted = await extractAllAttachments(selectedCloudZip);
+      const imageManifest = rawExtracted.filter(m => m.category === "image").slice(0, 100);
 
       if (!imageManifest.length) {
         aiIndexStatus.textContent = "No image attachments found in package.zip.";
         downloadStatusBar.classList.add("hidden");
         return;
+      }
+
+      const localFileMap = new Map();
+      try {
+        for await (const [folderName, handle] of targetHandle.entries()) {
+          if (handle.kind === "directory") {
+            for await (const [fileName, fileHandle] of handle.entries()) {
+              if (fileHandle.kind === "file") localFileMap.set(fileName, fileHandle);
+            }
+          } else if (handle.kind === "file") {
+            localFileMap.set(folderName, handle);
+          }
+        }
+      } catch (scanErr) {
+        console.warn("Could not index local target folder handles:", scanErr);
+      }
+
+      for (const item of imageManifest) {
+        if (localFileMap.has(item.filename)) {
+          item.fileHandle = localFileMap.get(item.filename);
+        }
       }
 
       dlStatusTitle.textContent = "Submitting to GPU Cloud Queue...";
@@ -1610,6 +1632,7 @@ if (btnStartCloudScan) {
       }
       
       const { job_id, position } = await queueResp.json();
+      let processingTimer = 0;
 
       const poll = setInterval(async () => {
         try {
@@ -1618,23 +1641,25 @@ if (btnStartCloudScan) {
           if (st.status === "queued") {
             const posText = st.position ? `#${st.position}` : "Next in line";
             dlStatusTitle.textContent = "⏳ Queued for GPU Processing...";
-            dlStatusDetail.textContent = `Queue Position: ${posText} • Waiting for your turn...`;
-            dlProgressBar.style.width = "35%";
-            aiIndexStatus.textContent = `Queue Position: ${posText} • Waiting for your turn...`;
+            dlStatusDetail.textContent = `Queue Position: ${posText} • Waiting for GPU turn...`;
+            dlProgressBar.style.width = "30%";
+            aiIndexStatus.textContent = `Queue Position: ${posText} • Waiting for GPU turn...`;
           }
 
           if (st.status === "processing") {
+            processingTimer += 2.5;
+            const dynamicProgress = Math.min(88, 35 + Math.floor(processingTimer * 0.6));
             dlStatusTitle.textContent = "⚡ GPU Active: Labelling with Qwen2.5-VL...";
-            dlStatusDetail.textContent = `Processing ~${imageManifest.length} images on NVIDIA L4 GPU...`;
-            dlProgressBar.style.width = "70%";
-            aiIndexStatus.textContent = "GPU Active: Labelling & indexing OCR with Qwen2.5-VL...";
+            dlStatusDetail.textContent = `Labelling ${imageManifest.length} images on NVIDIA L4 GPU (${Math.floor(processingTimer)}s elapsed)...`;
+            dlProgressBar.style.width = `${dynamicProgress}%`;
+            aiIndexStatus.textContent = `GPU Active: Labelling ${imageManifest.length} images with Qwen2.5-VL...`;
           }
 
           if (st.status === "completed") {
             clearInterval(poll);
             dlStatusTitle.textContent = "Saving Demo Database...";
             dlStatusDetail.textContent = "Writing demo.db to folder...";
-            dlProgressBar.style.width = "90%";
+            dlProgressBar.style.width = "95%";
             aiIndexStatus.textContent = "Saving demo.db to folder...";
 
             const dbResp = await fetch(`${VPS_BASE_URL}/api/download/${job_id}`);
@@ -1668,13 +1693,15 @@ if (btnStartCloudScan) {
             }
 
             allMediaRegistry = imageManifest;
+            rawCategoryCounts = { image: imageManifest.length, video: 0, audio: 0, doc: 0, other: 0 };
+            
             updateTimelineBounds();
             updateAiTimelineBounds();
             renderBadgeUI();
 
             dlProgressBar.style.width = "100%";
             dlStatusTitle.textContent = "Labelling Complete!";
-            dlStatusDetail.textContent = `Successfully saved demo.db and indexed ~${imageManifest.length} images.`;
+            dlStatusDetail.textContent = `Successfully saved demo.db and indexed ${imageManifest.length} images.`;
             aiIndexStatus.textContent = `Active Cloud Demo Index (${imageManifest.length} images indexed)`;
             
             setTimeout(() => { downloadStatusBar.classList.add("hidden"); }, 4000);
