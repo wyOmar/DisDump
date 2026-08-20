@@ -37,7 +37,7 @@ body {
   min-height: 100vh;
 }
 
-/* Nav (Z-Index elevated above modal backdrops to remain clear and interactive) */
+/* Nav (Elevated so it remains clear and interactive above modal overlays) */
 .top-nav {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
@@ -154,6 +154,7 @@ body {
   text-decoration: none;
   transition: background 0.15s, transform 0.1s;
   user-select: none;
+  line-height: 1;
 }
 
 .btn:active { transform: scale(0.98); }
@@ -186,7 +187,7 @@ body {
 .btn-outline-light { background: transparent; border: 1px solid rgba(255, 255, 255, 0.25); color: #fff; }
 .btn-outline-light:hover { background: rgba(255, 255, 255, 0.08); }
 .btn-lg { padding: 0.75rem 1.4rem; font-size: 0.95rem; }
-.btn-sm { padding: 0.35rem 0.7rem; font-size: 0.78rem; height: 32px; }
+.btn-sm { padding: 0.35rem 0.7rem; font-size: 0.78rem; height: 32px; box-sizing: border-box; }
 
 .btn-hero-action {
   padding: 0.65rem 1.4rem;
@@ -545,7 +546,26 @@ code {
 .card-tag-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem; }
 .card-header-flex h3 { font-size: 1rem; color: var(--text-header); }
 .card-header-flex p { font-size: 0.82rem; color: var(--text-muted); }
-.demo-cta-actions { display: flex; gap: 0.65rem; align-items: center; }
+
+/* Action Container with Aligned Button Heights */
+.demo-cta-actions {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.demo-cta-actions .btn-sm {
+  height: 32px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.demo-cta-actions .btn-sm code {
+  padding: 0.1rem 0.3rem;
+  font-size: 0.82em;
+}
 
 .local-host-banner {
   background: var(--bg-secondary);
@@ -880,7 +900,7 @@ code {
   border-radius: 4px;
 }
 
-/* Lightbox Modal with Hardware-Accelerated Pan & Zoom (Sits below sticky navbar to prevent navbar blur) */
+/* Lightbox Modal with Hardware-Accelerated Pan & Zoom */
 .lightbox-backdrop {
   position: fixed;
   top: 50px;
