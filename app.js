@@ -1,5 +1,5 @@
 // --- State & Configuration ---
-const VPS_BASE_URL = "https://ocr.vincentchan.uk";
+const VPS_BASE_URL = "";
 const ITEMS_PER_PAGE = 100;
 
 // Automatic Localhost Detection
