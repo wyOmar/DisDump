@@ -158,7 +158,7 @@ body {
 }
 
 .btn:active { transform: scale(0.98); }
-.btn-icon { width: 15px; height: 15px; }
+.btn-icon { width: 15px; height: 15px; flex-shrink: 0; display: inline-block; vertical-align: middle; }
 
 .btn-primary { background: var(--blurple); color: #fff; }
 .btn-primary:hover { background: var(--blurple-hover); }
@@ -816,7 +816,7 @@ code {
   border: 1px solid var(--border-subtle);
 }
 
-/* Fluid, Flat Support & Info Modals (No Box-in-a-Box) */
+/* Fluid, Flat Support & Info Modals (Zero Inner Box-in-a-Box) */
 .support-modal-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
@@ -901,6 +901,14 @@ code {
   font-size: 0.84rem;
   font-weight: 600;
   border-radius: 4px;
+}
+
+.footer-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 /* Lightbox Modal with Hardware-Accelerated Pan & Zoom */
