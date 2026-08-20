@@ -794,7 +794,7 @@ function renderAiGrid(items) {
     if (!hasIndexedDbLoaded && allMediaRegistry.length > 0) {
       aiEmptyMessage.innerHTML = `
         <strong>No AI Database Found (screenshots.db / demo.db)</strong><br><br>
-        Your media is loaded in the Media Browser. To enable Label Search for your files, run <code>python qwen-rtx.py</code> on your GPU or use our 100-image cloud demo above.
+        Your media is loaded in My Attachments. To enable Label Search for your files, run <code>python qwen-rtx.py</code> on your GPU or use our 100-image cloud demo above.
       `;
     } else {
       aiEmptyMessage.textContent = "No matching tagged media found.";
