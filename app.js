@@ -25,6 +25,8 @@ let activeDb = null;
 let hasIndexedDbLoaded = false;
 let currentExportDirHandle = null;
 let isExtractionRunning = false;
+let isCloudScanningRunning = false;
+let activeCloudJobId = null;
 let hasShownLabelDemoModal = false;
 
 let allMediaRegistry = [];       // Master user archive items
@@ -222,10 +224,19 @@ if (btnAcknowledgeBrowserWarning) {
 }
 
 window.addEventListener("beforeunload", (e) => {
-  if (isExtractionRunning) {
+  if (isExtractionRunning || isCloudScanningRunning) {
     e.preventDefault();
-    e.returnValue = "Extraction is currently in progress. Leaving this page will stop downloading attachments.";
+    e.returnValue = "Processing is currently in progress. Leaving this page will abort extraction or remove you from the cloud queue.";
     return e.returnValue;
+  }
+});
+
+window.addEventListener("pagehide", () => {
+  if (activeCloudJobId && isCloudScanningRunning) {
+    fetch(`${VPS_BASE_URL}/api/cancel-job/${activeCloudJobId}`, {
+      method: "POST",
+      keepalive: true
+    }).catch(() => {});
   }
 });
 
@@ -358,7 +369,6 @@ function getSanitizedTagsList(tagsString) {
     });
 }
 
-// Fallback image resolver: local disk blob -> live Discord CDN URL
 async function resolveItemBlob(item) {
   if (item.blobUrl) return item.blobUrl;
   if (item.fileHandle) {
@@ -1634,6 +1644,8 @@ if (btnStartCloudScan) {
       }
       
       const { job_id, position } = await queueResp.json();
+      activeCloudJobId = job_id;
+      isCloudScanningRunning = true;
       let processingTimer = 0;
 
       const poll = setInterval(async () => {
@@ -1659,6 +1671,9 @@ if (btnStartCloudScan) {
 
           if (st.status === "completed") {
             clearInterval(poll);
+            isCloudScanningRunning = false;
+            activeCloudJobId = null;
+
             dlStatusTitle.textContent = "Saving Demo Database...";
             dlStatusDetail.textContent = "Writing demo.db to folder...";
             dlProgressBar.style.width = "95%";
@@ -1712,6 +1727,8 @@ if (btnStartCloudScan) {
 
           if (st.status === "failed") {
             clearInterval(poll);
+            isCloudScanningRunning = false;
+            activeCloudJobId = null;
             downloadStatusBar.classList.add("hidden");
             aiIndexStatus.textContent = `Error: ${st.error || "Processing failed"}`;
           }
@@ -1721,6 +1738,8 @@ if (btnStartCloudScan) {
       }, 2500);
 
     } catch (err) {
+      isCloudScanningRunning = false;
+      activeCloudJobId = null;
       downloadStatusBar.classList.add("hidden");
       if (err.name === "SecurityError") {
         alert("Browser Security Notice: Browsers block selecting root folders (like Downloads or Desktop) directly. Please select a subfolder inside them instead (e.g. Downloads/MyMedia).");
