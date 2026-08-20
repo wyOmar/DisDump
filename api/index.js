@@ -1,19 +1,16 @@
+// api/index.js
 export default async function handler(req, res) {
   const VPS_URL = process.env.VPS_BACKEND_URL || "https://ocr.vincentchan.uk";
   const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || "";
 
-  // Reconstruct subpath (e.g. /api/queue-job, /api/job-status/123, /api/download/123)
-  const pathSegments = Array.isArray(req.query.path)
-    ? req.query.path.join("/")
-    : req.query.path || "";
+  // req.url contains the full original path (e.g. "/api/queue-job" or "/api/job-status/...")
+  const targetUrl = `${VPS_URL.replace(/\/+$/, "")}${req.url}`;
 
-  const targetUrl = `${VPS_URL.replace(/\/+$/, "")}/api/${pathSegments}`;
-
-  // Extract client IP to maintain accurate rate limiting
+  // Extract client IP for rate limiting
   const clientIp =
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
     req.headers["x-real-ip"] ||
-    req.socket.remoteAddress ||
+    req.socket?.remoteAddress ||
     "";
 
   try {
@@ -40,7 +37,7 @@ export default async function handler(req, res) {
 
     const response = await fetch(targetUrl, fetchOptions);
 
-    // Relay Content-Type and Content-Disposition headers for SQLite .db downloads
+    // Forward response headers (Content-Type & Content-Disposition for .db downloads)
     const resContentType = response.headers.get("content-type");
     if (resContentType) res.setHeader("Content-Type", resContentType);
 
@@ -52,9 +49,9 @@ export default async function handler(req, res) {
     const arrayBuffer = await response.arrayBuffer();
     return res.send(Buffer.from(arrayBuffer));
   } catch (error) {
-    console.error("Vercel Proxy Error:", error);
+    console.error("Proxy Error:", error);
     return res.status(502).json({
-      detail: "Bad Gateway: Could not establish connection to the backend orchestrator.",
+      detail: "Bad Gateway: Failed to contact backend orchestrator.",
     });
   }
 }
