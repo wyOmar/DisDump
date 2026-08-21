@@ -75,6 +75,20 @@ let startDragY = 0;
 
 const folderHandleCache = new Map();
 
+// Bounded LRU Blob URL Cache (Prevents memory leaks across thousands of files)
+const MAX_BLOB_CACHE = 250;
+const blobCache = new Map();
+
+function clearAllBlobUrls() {
+  for (const [item, url] of blobCache.entries()) {
+    if (url && typeof url === "string" && url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
+    if (item) item.blobUrl = null;
+  }
+  blobCache.clear();
+}
+
 // UI References
 const navTabs = document.querySelectorAll(".nav-tab");
 const screenViews = document.querySelectorAll(".screen-view");
@@ -369,12 +383,31 @@ function getSanitizedTagsList(tagsString) {
     });
 }
 
+// Bounded Blob Resolver with LRU Eviction
 async function resolveItemBlob(item) {
-  if (item.blobUrl) return item.blobUrl;
+  if (item.blobUrl) {
+    if (blobCache.has(item)) {
+      blobCache.delete(item);
+      blobCache.set(item, item.blobUrl);
+    }
+    return item.blobUrl;
+  }
   if (item.fileHandle) {
     try {
       const f = await item.fileHandle.getFile();
-      item.blobUrl = URL.createObjectURL(f);
+      const newUrl = URL.createObjectURL(f);
+      item.blobUrl = newUrl;
+
+      blobCache.set(item, newUrl);
+      if (blobCache.size > MAX_BLOB_CACHE) {
+        const oldestItem = blobCache.keys().next().value;
+        const oldestUrl = blobCache.get(oldestItem);
+        if (oldestUrl && typeof oldestUrl === "string" && oldestUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(oldestUrl);
+        }
+        if (oldestItem) oldestItem.blobUrl = null;
+        blobCache.delete(oldestItem);
+      }
       return item.blobUrl;
     } catch (e) {
       console.warn(`Could not resolve blob for ${item.filename}:`, e);
@@ -445,7 +478,7 @@ function renderBadgeUI() {
   document.getElementById("aiCntOth").textContent = formatNumber(activeAiCounts.other);
 }
 
-// --- 5. TAB 2: Raw Media Browser Logic & Timeline Engine ---
+// --- 5. TAB 2: Raw Media Browser Logic & Live Pagination Engine ---
 function updateTimelineBounds() {
   if (!allMediaRegistry.length) return;
   const timestamps = allMediaRegistry
@@ -491,33 +524,7 @@ function updateAiTimelineBounds() {
   }
 }
 
-function applyRawFiltersAndPaginate() {
-  if (allMediaRegistry.length === 0) {
-    rawBrowserToolbar.classList.add("hidden");
-    rawTimelineCard.classList.add("hidden");
-    rawTopPagination.classList.add("hidden");
-    rawBottomPagination.classList.add("hidden");
-    renderRawGrid([]);
-    return;
-  }
-
-  rawBrowserToolbar.classList.remove("hidden");
-  rawTopPagination.classList.remove("hidden");
-  rawBottomPagination.classList.remove("hidden");
-
-  rawFilteredRegistry = allMediaRegistry.filter(item => {
-    if (!rawSelectedCategories.has(item.category)) return false;
-    if (rawFilterStartDate && item.timestamp >= "2000" && item.timestamp.slice(0, 10) < rawFilterStartDate) return false;
-    if (rawFilterEndDate && item.timestamp >= "2000" && item.timestamp.slice(0, 10) > rawFilterEndDate) return false;
-    return true;
-  });
-
-  if (rawSortOrder === "newest") {
-    rawFilteredRegistry.sort((a, b) => b.filename.localeCompare(a.filename));
-  } else {
-    rawFilteredRegistry.sort((a, b) => a.filename.localeCompare(b.filename));
-  }
-
+function updateRawPaginationUI() {
   const total = rawFilteredRegistry.length;
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
 
@@ -545,7 +552,39 @@ function applyRawFiltersAndPaginate() {
     : "Showing 0 - 0 of 0";
   rawPageRangeTextTop.textContent = rangeStr;
   rawPageRangeTextBottom.textContent = rangeStr;
+}
 
+function applyRawFiltersAndPaginate() {
+  if (allMediaRegistry.length === 0) {
+    rawBrowserToolbar.classList.add("hidden");
+    rawTimelineCard.classList.add("hidden");
+    rawTopPagination.classList.add("hidden");
+    rawBottomPagination.classList.add("hidden");
+    renderRawGrid([]);
+    return;
+  }
+
+  rawBrowserToolbar.classList.remove("hidden");
+  rawTopPagination.classList.remove("hidden");
+  rawBottomPagination.classList.remove("hidden");
+
+  rawFilteredRegistry = allMediaRegistry.filter(item => {
+    if (!rawSelectedCategories.has(item.category)) return false;
+    if (rawFilterStartDate && item.timestamp >= "2000" && item.timestamp.slice(0, 10) < rawFilterStartDate) return false;
+    if (rawFilterEndDate && item.timestamp >= "2000" && item.timestamp.slice(0, 10) > rawFilterEndDate) return false;
+    return true;
+  });
+
+  if (rawSortOrder === "newest") {
+    rawFilteredRegistry.sort((a, b) => b.filename.localeCompare(a.filename));
+  } else {
+    rawFilteredRegistry.sort((a, b) => a.filename.localeCompare(b.filename));
+  }
+
+  updateRawPaginationUI();
+
+  const startIdx = (rawCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, rawFilteredRegistry.length);
   renderRawGrid(rawFilteredRegistry.slice(startIdx, endIdx));
 }
 
@@ -1231,6 +1270,7 @@ async function openExistingFolder() {
     dlStatusDetail.textContent = "Discovering files...";
     dlProgressBar.style.width = "20%";
 
+    clearAllBlobUrls();
     allMediaRegistry = [];
     rawCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
     folderHandleCache.clear();
@@ -1347,9 +1387,11 @@ async function extractAllAttachments(file, maxLimit = null) {
     unzipper.onfile = (entry) => {
       if (entry.name.includes("messages") && (entry.name.endsWith(".json") || entry.name.endsWith(".csv"))) {
         const textChunks = [];
+        const decoder = new TextDecoder("utf-8");
+
         entry.ondata = (err, chunk, final) => {
           if (err) return;
-          textChunks.push(new TextDecoder().decode(chunk));
+          textChunks.push(decoder.decode(chunk, { stream: !final }));
 
           if (final) {
             const rawContent = textChunks.join("");
@@ -1361,6 +1403,7 @@ async function extractAllAttachments(file, maxLimit = null) {
                   const datePrefix = formatDatePrefix(timestamp);
                   const content = (msg.Contents || msg.content || "") + " " + (msg.Attachments || "");
 
+                  attachmentUrlRegex.lastIndex = 0;
                   let match;
                   while ((match = attachmentUrlRegex.exec(content)) !== null) {
                     const [fullUrl, channelId, attachId, originalFilename] = match;
@@ -1394,6 +1437,7 @@ async function extractAllAttachments(file, maxLimit = null) {
               }
             } catch {}
 
+            attachmentUrlRegex.lastIndex = 0;
             let match;
             while ((match = attachmentUrlRegex.exec(rawContent)) !== null) {
               const [fullUrl, channelId, attachId, originalFilename] = match;
@@ -1467,6 +1511,7 @@ btnStartExportPipeline.addEventListener("click", async () => {
     });
     currentExportDirHandle = await parentDirHandle.getDirectoryHandle("disdump-download", { create: true });
     
+    clearAllBlobUrls();
     allMediaRegistry = [];
     rawCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
     rawCurrentPage = 1;
@@ -1527,12 +1572,18 @@ btnStartExportPipeline.addEventListener("click", async () => {
           processedCount++;
           
           const now = Date.now();
-          if (now - lastUiUpdate > 100 || processedCount === totalFiles) {
+          if (now - lastUiUpdate > 200 || processedCount === totalFiles) {
             lastUiUpdate = now;
             const pct = ((processedCount / totalFiles) * 100).toFixed(1);
             dlProgressBar.style.width = `${pct}%`;
             dlStatusDetail.textContent = `${pct}% • ${formatNumber(savedCount)} saved${skippedCount > 0 ? ` (${formatNumber(skippedCount)} expired/deleted)` : ""}`;
             renderBadgeUI();
+
+            // Refresh raw registry tracking and update pagination buttons dynamically
+            if (hasRenderedLiveInitialBatch) {
+              rawFilteredRegistry = allMediaRegistry.filter(m => rawSelectedCategories.has(m.category));
+              updateRawPaginationUI();
+            }
           }
         }
       }
@@ -1647,10 +1698,29 @@ if (btnStartCloudScan) {
       activeCloudJobId = job_id;
       isCloudScanningRunning = true;
       let processingTimer = 0;
+      let pollFailureCount = 0;
+      const MAX_POLL_FAILURES = 5;
 
       const poll = setInterval(async () => {
         try {
-          const st = await (await fetch(`${VPS_BASE_URL}/api/job-status/${job_id}`)).json();
+          const statusResp = await fetch(`${VPS_BASE_URL}/api/job-status/${job_id}`);
+          
+          if (!statusResp.ok) {
+            pollFailureCount++;
+            if (statusResp.status === 404 || pollFailureCount >= MAX_POLL_FAILURES) {
+              clearInterval(poll);
+              isCloudScanningRunning = false;
+              activeCloudJobId = null;
+              downloadStatusBar.classList.add("hidden");
+              aiIndexStatus.textContent = statusResp.status === 404
+                ? "Error: Cloud scan job expired or was reset by server."
+                : `Error: Server connection failed (HTTP ${statusResp.status}).`;
+            }
+            return;
+          }
+
+          pollFailureCount = 0;
+          const st = await statusResp.json();
           
           if (st.status === "queued") {
             const posText = st.position ? `#${st.position}` : "Next in line";
@@ -1680,6 +1750,7 @@ if (btnStartCloudScan) {
             aiIndexStatus.textContent = "Saving demo.db to folder...";
 
             const dbResp = await fetch(`${VPS_BASE_URL}/api/download/${job_id}`);
+            if (!dbResp.ok) throw new Error(`Download failed: HTTP ${dbResp.status}`);
             const dbBuf = await dbResp.arrayBuffer();
 
             const dbFile = await targetHandle.getFileHandle("demo.db", { create: true });
@@ -1733,7 +1804,15 @@ if (btnStartCloudScan) {
             aiIndexStatus.textContent = `Error: ${st.error || "Processing failed"}`;
           }
         } catch (pollErr) {
+          pollFailureCount++;
           console.warn("Status poll error:", pollErr);
+          if (pollFailureCount >= MAX_POLL_FAILURES) {
+            clearInterval(poll);
+            isCloudScanningRunning = false;
+            activeCloudJobId = null;
+            downloadStatusBar.classList.add("hidden");
+            aiIndexStatus.textContent = "Error: Lost connection to GPU scan service.";
+          }
         }
       }, 2500);
 
