@@ -127,12 +127,15 @@ export async function extractAllAttachments(file, maxLimit = null) {
   });
 }
 
-export async function openExistingFolder() {
+export async function openExistingFolder(providedHandle = null) {
   try {
-    const pickedHandle = await window.showDirectoryPicker({ 
-      mode: "read",
-      startIn: "downloads"
-    });
+    let pickedHandle = providedHandle;
+    if (!pickedHandle) {
+      pickedHandle = await window.showDirectoryPicker({ 
+        mode: "read",
+        startIn: "downloads"
+      });
+    }
     
     let targetHandle = pickedHandle;
     if (pickedHandle.name !== "disdump-download") {
@@ -308,134 +311,221 @@ export async function loadDemoVault() {
   }
 }
 
-export function setupExtractorEvents() {
-  dom.extractorZipInput.addEventListener("change", (e) => {
-    if (!e.target.files.length) return;
-    state.selectedZipFile = e.target.files[0];
-    
-    if (state.selectedZipFile.name.toLowerCase() !== "package.zip") {
-      dom.selectedZipFilename.textContent = `Selected: ${state.selectedZipFile.name} (Notice: Ensure this is your unedited Discord data package)`;
-    } else {
-      dom.selectedZipFilename.textContent = `Selected: ${state.selectedZipFile.name} (${(state.selectedZipFile.size / (1024 * 1024)).toFixed(1)} MB)`;
-    }
-    
-    dom.selectedZipFilename.classList.remove("hidden");
+function handleZipFileSelection(file) {
+  if (!file) return;
+  state.selectedZipFile = file;
+
+  const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+  if (dom.selectedZipFilename) {
+    dom.selectedZipFilename.textContent = `${file.name} (${sizeMb} MB)`;
+  }
+  
+  if (dom.zipDropzonePrompt) dom.zipDropzonePrompt.classList.add("hidden");
+  if (dom.zipSelectedInfo) dom.zipSelectedInfo.classList.remove("hidden");
+  if (dom.btnStartExportPipeline) {
+    dom.btnStartExportPipeline.classList.remove("hidden");
     dom.btnStartExportPipeline.disabled = false;
-  });
+  }
+}
 
-  dom.btnStartExportPipeline.addEventListener("click", async () => {
-    if (!state.selectedZipFile) return;
+export function setupExtractorEvents() {
+  // Zip Dropzone: Click
+  if (dom.zipDropzone) {
+    dom.zipDropzone.addEventListener("click", () => {
+      if (dom.extractorZipInput) dom.extractorZipInput.click();
+    });
 
-    try {
-      const parentDirHandle = await window.showDirectoryPicker({ 
-        mode: "readwrite",
-        startIn: "downloads"
-      });
-      state.currentExportDirHandle = await parentDirHandle.getDirectoryHandle("disdump-download", { create: true });
-      
-      clearAllBlobUrls();
-      state.allMediaRegistry = [];
-      state.rawCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
-      state.rawCurrentPage = 1;
-      state.folderHandleCache.clear();
-      state.isExtractionRunning = true;
-      state.hasIndexedDbLoaded = false;
+    // Zip Dropzone: Drag & Drop
+    dom.zipDropzone.addEventListener("dragenter", (e) => {
+      e.preventDefault();
+      dom.zipDropzone.classList.add("drag-over");
+    });
 
-      window.switchTab("tabRawBrowser");
+    dom.zipDropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dom.zipDropzone.classList.add("drag-over");
+    });
 
-      dom.downloadStatusBar.classList.remove("hidden");
-      dom.dlStatusTitle.textContent = "Scanning package.zip message history...";
+    dom.zipDropzone.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      dom.zipDropzone.classList.remove("drag-over");
+    });
 
-      const manifest = await extractAllAttachments(state.selectedZipFile);
-      const totalFiles = manifest.length;
-      dom.dlStatusTitle.textContent = `Downloading & sorting ${formatNumber(totalFiles)} attachments...`;
+    dom.zipDropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dom.zipDropzone.classList.remove("drag-over");
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleZipFileSelection(e.dataTransfer.files[0]);
+      }
+    });
+  }
 
-      const queue = [...manifest];
-      const concurrency = 16;
-      let savedCount = 0;
-      let skippedCount = 0;
-      let processedCount = 0;
-      let lastUiUpdate = Date.now();
-      let hasRenderedLiveInitialBatch = false;
+  // File Input change listener
+  if (dom.extractorZipInput) {
+    dom.extractorZipInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleZipFileSelection(e.target.files[0]);
+      }
+    });
+  }
 
-      async function worker() {
-        while (queue.length > 0) {
-          const item = queue.shift();
+  // Folder Dropzone: Click & Drag & Drop
+  if (dom.folderDropzone) {
+    dom.folderDropzone.addEventListener("click", () => openExistingFolder());
+
+    dom.folderDropzone.addEventListener("dragenter", (e) => {
+      e.preventDefault();
+      dom.folderDropzone.classList.add("drag-over");
+    });
+
+    dom.folderDropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dom.folderDropzone.classList.add("drag-over");
+    });
+
+    dom.folderDropzone.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      dom.folderDropzone.classList.remove("drag-over");
+    });
+
+    dom.folderDropzone.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      dom.folderDropzone.classList.remove("drag-over");
+
+      const items = e.dataTransfer ? e.dataTransfer.items : null;
+      if (items && items.length > 0) {
+        const item = items[0];
+        if (item.getAsFileSystemHandle) {
           try {
-            const resp = await fetch(item.url);
-            if (resp.ok) {
-              const blob = await resp.blob();
-              const subfolder = await getSubfolder(state.currentExportDirHandle, item.ext);
-              
-              try {
-                const fh = await subfolder.getFileHandle(item.filename, { create: true });
-                const w = await fh.createWritable();
-                await w.write(blob);
-                await w.close();
-                item.fileHandle = fh;
-              } catch (writeErr) {
-                console.warn(`File write skipped: ${item.filename}`, writeErr);
-              }
-
-              state.rawCategoryCounts[item.category] = (state.rawCategoryCounts[item.category] || 0) + 1;
-              state.allMediaRegistry.push(item);
-              savedCount++;
-
-              if (!hasRenderedLiveInitialBatch && (savedCount >= 30 || savedCount === totalFiles)) {
-                hasRenderedLiveInitialBatch = true;
-                applyRawFiltersAndPaginate();
-              }
-            } else {
-              skippedCount++;
+            const handle = await item.getAsFileSystemHandle();
+            if (handle && handle.kind === "directory") {
+              openExistingFolder(handle);
+              return;
             }
-          } catch {
-            skippedCount++;
-          } finally {
-            processedCount++;
-            
-            const now = Date.now();
-            if (now - lastUiUpdate > 200 || processedCount === totalFiles) {
-              lastUiUpdate = now;
-              const pct = ((processedCount / totalFiles) * 100).toFixed(1);
-              dom.dlProgressBar.style.width = `${pct}%`;
-              dom.dlStatusDetail.textContent = `${pct}% • ${formatNumber(savedCount)} saved${skippedCount > 0 ? ` (${formatNumber(skippedCount)} expired/deleted)` : ""}`;
-              renderBadgeUI();
+          } catch (err) {
+            console.warn("Could not get directory handle via drop:", err);
+          }
+        }
+      }
+      openExistingFolder();
+    });
+  }
 
-              if (hasRenderedLiveInitialBatch) {
-                state.rawFilteredRegistry = state.allMediaRegistry.filter(m => state.rawSelectedCategories.has(m.category));
-                updateRawPaginationUI();
+  // Pipeline Execution Button
+  if (dom.btnStartExportPipeline) {
+    dom.btnStartExportPipeline.addEventListener("click", async () => {
+      if (!state.selectedZipFile) return;
+
+      try {
+        const parentDirHandle = await window.showDirectoryPicker({ 
+          mode: "readwrite",
+          startIn: "downloads"
+        });
+        state.currentExportDirHandle = await parentDirHandle.getDirectoryHandle("disdump-download", { create: true });
+        
+        clearAllBlobUrls();
+        state.allMediaRegistry = [];
+        state.rawCategoryCounts = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
+        state.rawCurrentPage = 1;
+        state.folderHandleCache.clear();
+        state.isExtractionRunning = true;
+        state.hasIndexedDbLoaded = false;
+
+        window.switchTab("tabRawBrowser");
+
+        dom.downloadStatusBar.classList.remove("hidden");
+        dom.dlStatusTitle.textContent = "Scanning package.zip message history...";
+
+        const manifest = await extractAllAttachments(state.selectedZipFile);
+        const totalFiles = manifest.length;
+        dom.dlStatusTitle.textContent = `Downloading & sorting ${formatNumber(totalFiles)} attachments...`;
+
+        const queue = [...manifest];
+        const concurrency = 16;
+        let savedCount = 0;
+        let skippedCount = 0;
+        let processedCount = 0;
+        let lastUiUpdate = Date.now();
+        let hasRenderedLiveInitialBatch = false;
+
+        async function worker() {
+          while (queue.length > 0) {
+            const item = queue.shift();
+            try {
+              const resp = await fetch(item.url);
+              if (resp.ok) {
+                const blob = await resp.blob();
+                const subfolder = await getSubfolder(state.currentExportDirHandle, item.ext);
+                
+                try {
+                  const fh = await subfolder.getFileHandle(item.filename, { create: true });
+                  const w = await fh.createWritable();
+                  await w.write(blob);
+                  await w.close();
+                  item.fileHandle = fh;
+                } catch (writeErr) {
+                  console.warn(`File write skipped: ${item.filename}`, writeErr);
+                }
+
+                state.rawCategoryCounts[item.category] = (state.rawCategoryCounts[item.category] || 0) + 1;
+                state.allMediaRegistry.push(item);
+                savedCount++;
+
+                if (!hasRenderedLiveInitialBatch && (savedCount >= 30 || savedCount === totalFiles)) {
+                  hasRenderedLiveInitialBatch = true;
+                  applyRawFiltersAndPaginate();
+                }
+              } else {
+                skippedCount++;
+              }
+            } catch {
+              skippedCount++;
+            } finally {
+              processedCount++;
+              
+              const now = Date.now();
+              if (now - lastUiUpdate > 200 || processedCount === totalFiles) {
+                lastUiUpdate = now;
+                const pct = ((processedCount / totalFiles) * 100).toFixed(1);
+                dom.dlProgressBar.style.width = `${pct}%`;
+                dom.dlStatusDetail.textContent = `${pct}% • ${formatNumber(savedCount)} saved${skippedCount > 0 ? ` (${formatNumber(skippedCount)} expired/deleted)` : ""}`;
+                renderBadgeUI();
+
+                if (hasRenderedLiveInitialBatch) {
+                  state.rawFilteredRegistry = state.allMediaRegistry.filter(m => state.rawSelectedCategories.has(m.category));
+                  updateRawPaginationUI();
+                }
               }
             }
           }
         }
+
+        await Promise.all(Array.from({ length: concurrency }, () => worker()));
+        state.isExtractionRunning = false;
+        
+        dom.dlStatusTitle.textContent = "Extraction complete!";
+        dom.dlStatusDetail.textContent = `All ${formatNumber(savedCount)} available files downloaded into /disdump-download.`;
+        
+        renderBadgeUI();
+        updateTimelineBounds();
+        applyRawFiltersAndPaginate();
+
+        setTimeout(() => {
+          openCompletionModal("download");
+        }, 600);
+
+      } catch (err) {
+        state.isExtractionRunning = false;
+        if (err.name === "SecurityError") {
+          alert("Browser Security Notice: Browsers block selecting root folders (like Downloads or Desktop) directly. Please open Downloads, create a new folder (e.g. 'MyDiscordMedia'), and select that folder.");
+        } else if (err.name !== "AbortError") {
+          alert("Export failed: " + err.message);
+        }
       }
+    });
+  }
 
-      await Promise.all(Array.from({ length: concurrency }, () => worker()));
-      state.isExtractionRunning = false;
-      
-      dom.dlStatusTitle.textContent = "Extraction complete!";
-      dom.dlStatusDetail.textContent = `All ${formatNumber(savedCount)} available files downloaded into /disdump-download.`;
-      
-      renderBadgeUI();
-      updateTimelineBounds();
-      applyRawFiltersAndPaginate();
-
-      setTimeout(() => {
-        openCompletionModal("download");
-      }, 600);
-
-    } catch (err) {
-      state.isExtractionRunning = false;
-      if (err.name === "SecurityError") {
-        alert("Browser Security Notice: Browsers block selecting root folders (like Downloads or Desktop) directly. Please open Downloads, create a new folder (e.g. 'MyDiscordMedia'), and select that folder.");
-      } else if (err.name !== "AbortError") {
-        alert("Export failed: " + err.message);
-      }
-    }
-  });
-
-  dom.btnHeroOpenExisting.addEventListener("click", openExistingFolder);
-  if (dom.btnRawOpenFolder) dom.btnRawOpenFolder.addEventListener("click", openExistingFolder);
-  if (dom.btnAiOpenFolder) dom.btnAiOpenFolder.addEventListener("click", openExistingFolder);
-  if (dom.btnEmptyOpenFolder) dom.btnEmptyOpenFolder.addEventListener("click", openExistingFolder);
+  if (dom.btnRawOpenFolder) dom.btnRawOpenFolder.addEventListener("click", () => openExistingFolder());
+  if (dom.btnAiOpenFolder) dom.btnAiOpenFolder.addEventListener("click", () => openExistingFolder());
+  if (dom.btnEmptyOpenFolder) dom.btnEmptyOpenFolder.addEventListener("click", () => openExistingFolder());
 }

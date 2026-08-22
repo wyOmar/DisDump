@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="google-site-verification" content="mGyMTMTchgWR3Bz98RD9ACaNmpuz8U5zopN5UWPsy0c" />
 
   <!-- Favicons -->
   <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
@@ -13,7 +14,7 @@
   <title>DisDump | Recover & Download Your Discord Attachments Offline</title>
   <meta name="title" content="DisDump | Recover & Download Your Discord Attachments Offline" />
   <meta name="description" content="Privacy-first offline Discord attachment extractor and visual OCR search engine. Extract your package.zip into organized folders and search screenshots offline." />
-  <meta name="keywords" content="discord package.zip extractor, discord data dump, discord media backup, search discord screenshots ocr, discord attachment downloader" />
+  <meta name="keywords" content="discord package.zip extractor, discord data dump, discord media backup, search discord screenshots ocr, discord attachment downloader, discord download all attachments, discord recover old images, discord download old videos" />
   <meta name="robots" content="index, follow" />
   <meta name="theme-color" content="#5865f2" />
 
@@ -23,7 +24,7 @@
   <meta property="og:title" content="DisDump | Recover & Download Your Discord Attachments" />
   <meta property="og:description" content="Extract package.zip into sorted subfolders and query screenshots with offline OCR search." />
 
-  <!-- Structured Data: JSON-LD -->
+  <!-- Structured Data: Software Application -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -37,6 +38,72 @@
       "priceCurrency": "USD"
     },
     "description": "Client-side private archive extractor and OCR search engine for Discord package.zip exports."
+  }
+  </script>
+
+  <!-- Structured Data: FAQ Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How do I download all my attachments from Discord at once?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Request your data export (package.zip) from Discord settings, then open it in DisDump. DisDump automatically extracts and bulk-downloads all images, videos, audio, and documents directly to your hard drive in sorted folders."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I recover old images from closed Discord DMs or left servers?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Discord's data export logs all messages you have ever sent, including closed DMs. As long as the original message was not deleted, DisDump can recover and download the original full-resolution images."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I download old videos and gameplay clips sent on Discord?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "DisDump identifies all .mp4, .webm, and .mov video attachments in your Discord export package and downloads them directly into organized video folders with original timestamps."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Why does Discord's package.zip only contain text links instead of photos?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Discord only exports JSON and CSV text logs containing CDN links to keep file sizes small. DisDump streams these logs in your browser to download the actual media files."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is it safe to load my Discord data package into DisDump?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The core extraction process runs 100% locally in your web browser. Your message logs, DMs, and personal info are never uploaded to any server; your browser fetches attachments directly from Discord's CDN. The optional cloud demo tab only sends attachment URLs to a remote GPU worker if you explicitly choose to test OCR tagging."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Why did some Discord export files fail or show as 404 expired?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "If the original Discord message, DM, or server was deleted, Discord purges the stored media from its CDN servers. These expired links return a 404 error and cannot be recovered."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Why is a Chromium-based browser required?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "DisDump uses the native File System Access API (showDirectoryPicker) to write thousands of files directly to your hard drive without running out of memory. Currently, Google Chrome, Microsoft Edge, and Arc support this API natively (Brave users must enable the flag in brave://flags/#file-system-access-api)."
+        }
+      }
+    ]
   }
   </script>
 
@@ -96,7 +163,7 @@
       </nav>
     </header>
 
-    <!-- Global Progress Tracker for Downloads, Scans & Queue State -->
+    <!-- Global Progress Tracker -->
     <aside id="downloadStatusBar" class="download-bar hidden" aria-label="Task Tracker">
       <div class="download-info">
         <span id="dlStatusTitle" class="dl-title">Processing...</span>
@@ -121,7 +188,7 @@
         </div>
         <div class="callout-content">
           <strong>Privacy Notice:</strong>
-          <span>Your data package contains all your sent messages and attachments. This application runs 100% locally in your browser. Although the source code is on <a href="https://github.com/wyOmar/DisDump" target="_blank" rel="noopener noreferrer">GitHub</a>, for maximum safety you can clone the repository and host it locally offline.</span>
+          <span>Your data package contains all your sent messages and attachments. This extractor runs 100% locally in your browser. Although the source code is on <a href="https://github.com/wyOmar/DisDump" target="_blank" rel="noopener noreferrer">GitHub</a>, for maximum safety you can clone the repository and host it locally.</span>
         </div>
         <a href="#guideSection" class="btn btn-sm btn-outline-light">
           Export Guide &darr;
@@ -139,45 +206,58 @@
           
           <!-- Option A: Download All Attachments -->
           <div class="action-card primary-card">
-            <div class="card-tag">NEW ARCHIVE</div>
-            <h2>Download Attachments from <code>package.zip</code></h2>
-            <p>Extract all photos, videos, audio, and documents into a local folder.</p>
+            <div class="card-tag">NEW USER</div>
+            <h2>Download Attachments</h2>
+            <p>Extract all photos, videos, audio, and documents from your Discord <code>package.zip</code></p>
             
-            <div class="step-inputs">
-              <label for="extractorZipInput" class="btn btn-primary btn-lg" id="lblChooseZip">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <input type="file" id="extractorZipInput" accept=".zip" style="display: none;" />
+
+            <!-- Interactive Dashed Dropzone -->
+            <div class="dropzone-box" id="zipDropzone">
+              <div class="dropzone-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   <polyline points="17 8 12 3 7 8"></polyline>
                   <line x1="12" y1="3" x2="12" y2="15"></line>
                 </svg>
-                1. Choose <code>package.zip</code>
-              </label>
-              <input type="file" id="extractorZipInput" accept=".zip" style="display: none;" />
-              <p id="selectedZipFilename" class="file-confirm-text hidden"></p>
-
-              <button id="btnStartExportPipeline" class="btn btn-accent btn-lg" disabled>
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                </svg>
-                2. Pick Destination & Download
-              </button>
+              </div>
+              <div class="dropzone-text" id="zipDropzonePrompt">
+                <span class="dropzone-main-text">Drop <code>package.zip</code> here</span>
+                <span class="dropzone-sub-text">or click to browse</span>
+              </div>
+              <div id="zipSelectedInfo" class="dropzone-file-pill hidden">
+                <span class="pill-check">✓</span>
+                <span id="selectedZipFilename">package.zip</span>
+              </div>
             </div>
+
+            <!-- Action Button: Revealed after choosing zip -->
+            <button id="btnStartExportPipeline" class="btn btn-accent btn-lg btn-destination hidden">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              Pick Destination & Download
+            </button>
           </div>
 
           <!-- Option B: Returning Users -->
           <div class="action-card secondary-card">
             <div class="card-tag secondary">BEEN HERE BEFORE?</div>
-            <h2>Open Existing <code>disdump-download</code> Folder</h2>
-            <p>Already downloaded your media / generated a <code>screenshots.db</code> with the local script?</p>
+            <h2>Open <code>disdump-download</code> Folder</h2>
+            <p>Already have a <code>disdump-download</code> folder?</p>
             
-            <div class="step-inputs">
-              <button id="btnHeroOpenExisting" class="btn btn-secondary btn-lg">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <!-- Interactive Dashed Folder Dropzone -->
+            <div class="dropzone-box folder-dropzone" id="folderDropzone">
+              <div class="dropzone-icon folder-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                 </svg>
-                Open Media Folder
-              </button>
-              <span class="sub-caption">Instantly loads files and offline search database</span>
+              </div>
+              <div class="dropzone-text">
+                <span class="folder-title-tag"><code>disdump-download/</code></span>
+                <span class="dropzone-sub-text">Click or drop folder to open</span>
+              </div>
+              <span class="folder-sub-caption">Instantly loads files and offline search</span>
             </div>
           </div>
 
@@ -187,7 +267,6 @@
       <!-- Step-by-Step Visual How-To Guide -->
       <article class="guide-container" id="guideSection">
         
-        <!-- Action Buttons above Guide Header -->
         <div class="guide-action-buttons">
           <a href="https://github.com/wyOmar/DisDump" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-hero-action">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -248,6 +327,109 @@
           </div>
         </section>
       </article>
+
+      <!-- Frequently Asked Questions -->
+      <section class="faq-container" id="faqSection">
+        <div class="guide-divider"><span>FREQUENTLY ASKED QUESTIONS</span></div>
+
+        <div class="faq-grid">
+          <details class="faq-item">
+            <summary class="faq-question">
+              <span>How do I download all my attachments from Discord at once?</span>
+              <span class="faq-chevron">&darr;</span>
+            </summary>
+            <div class="faq-answer">
+              <p>
+                To download all your Discord attachments at once, request your data package from Discord under <strong>User Settings &gt; Data & Privacy</strong>. Once you receive your <code>package.zip</code>, open it in DisDump. The tool parses every JSON and CSV log file across all your DMs, group chats, and servers, automatically downloading all photos, videos, audio clips, and documents directly to your computer in sorted folders.
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-question">
+              <span>Can I recover old images from closed DMs or left servers?</span>
+              <span class="faq-chevron">&darr;</span>
+            </summary>
+            <div class="faq-answer">
+              <p>
+                <strong>Yes.</strong> Your official Discord data export contains your entire historical sent message log, even from DMs you closed years ago or servers you have since left. As long as the original message was not manually deleted, Discord's CDN still hosts the original full-resolution media files. DisDump extracts these links from your archive and downloads the original images straight to your local drive.
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-question">
+              <span>How do I download old videos and clips I sent on Discord?</span>
+              <span class="faq-chevron">&darr;</span>
+            </summary>
+            <div class="faq-answer">
+              <p>
+                DisDump automatically detects all video files referenced in your Discord export (including <code>.mp4</code>, <code>.webm</code>, <code>.mov</code>, and <code>.mkv</code> formats). During extraction, it downloads the raw video binaries and sorts them into dedicated video subfolders (such as <code>/mp4/</code>) with original sent dates prepended to the filenames (e.g. <code>2023-08-14_clip.mp4</code>).
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-question">
+              <span>Why does Discord's <code>package.zip</code> not include my photos and videos directly?</span>
+              <span class="faq-chevron">&darr;</span>
+            </summary>
+            <div class="faq-answer">
+              <p>
+                When Discord prepares your data export under <strong>User Settings &gt; Data & Privacy</strong>, they only package your text logs (JSON and CSV files) to save bandwidth. Inside these files are direct URLs pointing to Discord's content delivery network (<code>cdn.discordapp.com</code>). DisDump reads these logs locally in your browser and automatically fetches the original full-resolution media files directly to your drive.
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-question">
+              <span>Is it safe to load my Discord data package into DisDump?</span>
+              <span class="faq-chevron">&darr;</span>
+            </summary>
+            <div class="faq-answer">
+              <p>
+                <strong>Yes, 100%.</strong> The core extraction process runs entirely client-side inside your web browser. None of your message history, DMs, tokens, or personal information are ever uploaded to any remote server or third party. Your browser connects directly to Discord's official CDN to download the media files. (The separate, optional Cloud Demo tab only sends attachment URLs to a remote GPU worker if you explicitly choose to test OCR tagging).
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-question">
+              <span>Why did some files fail or show as expired/deleted?</span>
+              <span class="faq-chevron">&darr;</span>
+            </summary>
+            <div class="faq-answer">
+              <p>
+                Discord stores media on its servers as long as the original message, channel, or server still exists. If a message was deleted, a DM was closed, or a server was deleted by its owner, Discord deletes the file from its CDN. These URLs return a <code>404 Not Found</code> error and cannot be recovered by any tool.
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-question">
+              <span>Why is a Chromium-based browser required?</span>
+              <span class="faq-chevron">&darr;</span>
+            </summary>
+            <div class="faq-answer">
+              <p>
+                DisDump uses the modern <strong>File System Access API</strong> (<code>showDirectoryPicker</code>) to stream thousands of media attachments straight onto your hard drive without running out of browser RAM. Currently, Google Chrome, Microsoft Edge, Arc, and Opera support direct local directory writes natively. Firefox and Safari do not support this standard yet. <em>(Note for Brave users: Brave disables this API by default; you can enable it in <code>brave://flags/#file-system-access-api</code>).</em>
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-question">
+              <span>Can I search text inside my screenshots or filter by visual tags?</span>
+              <span class="faq-chevron">&darr;</span>
+            </summary>
+            <div class="faq-answer">
+              <p>
+                Yes. DisDump includes an offline vision model script (<code>label-script/qwen-rtx.py</code>) that uses <strong>Qwen2.5-VL</strong> to index all your saved images into a local SQLite database (<code>screenshots.db</code>). This lets you search through receipts, code snippets, memes, and game scoreboard text completely offline.
+              </p>
+            </div>
+          </details>
+        </div>
+      </section>
     </main>
 
     <!-- TAB 2: RAW MEDIA BROWSER -->
@@ -564,7 +746,7 @@
 
           <a href="https://ko-fi.com/chanvincent" target="_blank" rel="noopener noreferrer" class="footer-link kofi-highlight">
             <svg class="footer-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.047 3.974-4.047 3.974s-2.8-2.521-4.047-3.974c-1.332-1.554-.832-4.071 1.069-4.57 1.901-.5 2.978 1.002 2.978 1.002s1.077-1.502 2.978-1.002c1.901.499 2.401 3.016 1.069 4.57zm6.305-1.232c-.377 1.99-2.029 2.378-2.029 2.378v-4.834s1.652.466 2.029 2.456z"/>
+              <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.047 3.974-4.047 3.974s-2.8-2.521-4.047-3.974c-1.332-1.554-.832-4.071 1.069-4.57 1.901-.5 2.978 1.002 2.978 1.002s1.077-1.502 2.978-1.002c1.901.499 2.401 3.016 1.069 4.57zm6.305-1.232c-.377 1.99-2.029 2.378-2.029 2.378v-4.834s1.652.466 2.029 2.456z"/>
             </svg>
             Support on Ko-fi
           </a>
@@ -600,7 +782,7 @@
           Firefox, Safari, and older browsers do not support direct local directory writes. Folder picking and extraction will fail.
         </div>
         <p>
-          Please open this site in a Chromium-based browser: <strong>Google Chrome, Microsoft Edge, Brave, Helium, or Arc</strong>.
+          Please open this site in a Chromium-based browser: <strong>Google Chrome, Microsoft Edge, Arc, or Opera</strong> (Note: Brave users must enable the flag in <code>brave://flags/#file-system-access-api</code>).
         </p>
         <div class="support-action-row">
           <button id="btnAcknowledgeBrowserWarning" class="btn btn-secondary btn-modal-action">

@@ -2,16 +2,18 @@ export const dom = {
   navTabs: document.querySelectorAll(".nav-tab"),
   screenViews: document.querySelectorAll(".screen-view"),
   navBrand: document.getElementById("navBrand"),
-  btnHeroOpenExisting: document.getElementById("btnHeroOpenExisting"),
   btnRawOpenFolder: document.getElementById("btnRawOpenFolder"),
   btnAiOpenFolder: document.getElementById("btnAiOpenFolder"),
   btnEmptyOpenFolder: document.getElementById("btnEmptyOpenFolder"),
 
-  // Tab 1: Extractor
+  // Tab 1: Extractor Dropzones & Inputs
+  zipDropzone: document.getElementById("zipDropzone"),
+  zipDropzonePrompt: document.getElementById("zipDropzonePrompt"),
   extractorZipInput: document.getElementById("extractorZipInput"),
-  lblChooseZip: document.getElementById("lblChooseZip"),
+  zipSelectedInfo: document.getElementById("zipSelectedInfo"),
   selectedZipFilename: document.getElementById("selectedZipFilename"),
   btnStartExportPipeline: document.getElementById("btnStartExportPipeline"),
+  folderDropzone: document.getElementById("folderDropzone"),
 
   // Tab 2: Raw Browser
   rawBrowserToolbar: document.getElementById("rawBrowserToolbar"),
